@@ -2,7 +2,9 @@ package judging
 
 import (
 	"math"
+	"math/rand"
 	"sort"
+	"time"
 )
 
 // ZScoreNormalize standardizes a slice of raw scores for a single judge.
@@ -213,4 +215,74 @@ func computeRanks(scores []float64) []int {
 		ranks[kv.index] = r + 1 // 1-based rank
 	}
 	return ranks
+}
+
+// BootstrapConfidenceIntervals estimates the 90% confidence bounds (5th and 95th percentiles)
+// for the rank of each project by resampling the pairwise comparisons with replacement.
+func BootstrapConfidenceIntervals(wins [][]int, n int, iterations int) []RankInterval {
+	if n == 0 {
+		return nil
+	}
+
+	// Flatten all original comparisons into a list of (winner, loser) pairs
+	var allComparisons [][2]int
+	for i := 0; i < n; i++ {
+		for j := 0; j < n; j++ {
+			for k := 0; k < wins[i][j]; k++ {
+				allComparisons = append(allComparisons, [2]int{i, j})
+			}
+		}
+	}
+
+	totalComps := len(allComparisons)
+	if totalComps == 0 {
+		intervals := make([]RankInterval, n)
+		for i := 0; i < n; i++ {
+			intervals[i] = RankInterval{ProjectIndex: i, Lower: 1, Upper: n}
+		}
+		return intervals
+	}
+
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	projectRanks := make([][]int, n)
+
+	for iter := 0; iter < iterations; iter++ {
+		// Resample with replacement
+		resampledWins := make([][]int, n)
+		for i := 0; i < n; i++ {
+			resampledWins[i] = make([]int, n)
+		}
+
+		for i := 0; i < totalComps; i++ {
+			idx := rng.Intn(totalComps)
+			pair := allComparisons[idx]
+			resampledWins[pair[0]][pair[1]]++
+		}
+
+		// Calculate qualities and ranks for this bootstrap sample
+		qualities := FitBradleyTerry(resampledWins, n)
+		ranks := computeRanks(qualities)
+		for i, r := range ranks {
+			projectRanks[i] = append(projectRanks[i], r)
+		}
+	}
+
+	var intervals []RankInterval
+	for i := 0; i < n; i++ {
+		sort.Ints(projectRanks[i])
+		p5 := int(math.Floor(float64(iterations) * 0.05))
+		p95 := int(math.Floor(float64(iterations) * 0.95))
+		
+		// Boundary checks
+		if p95 >= iterations {
+			p95 = iterations - 1
+		}
+
+		intervals = append(intervals, RankInterval{
+			ProjectIndex: i,
+			Lower:        projectRanks[i][p5],
+			Upper:        projectRanks[i][p95],
+		})
+	}
+	return intervals
 }
