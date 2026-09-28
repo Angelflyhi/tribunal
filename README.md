@@ -22,17 +22,17 @@ This will:
 - Expose the platform on `http://localhost:8080`.
 
 ## Features & Compliance (T1 & T2 Verified)
-- ✅ Gallery browsing (T1)
-- ✅ Submission blocking after event close (T1)
-- ✅ Configurable Weighted Scoring Rubric (T2)
-- ✅ Strict Role & Peer Isolation (T2)
-- ✅ Organizer CSV export (T2)
+- Gallery browsing (T1)
+- Submission blocking after event close (T1)
+- Configurable Weighted Scoring Rubric (T2)
+- Strict Role & Peer Isolation (T2)
+- Organizer CSV export (T2)
 
 ## Advanced Bonuses & Integrations
-- 🚀 **Advanced Pairwise Mode (T3 Bonus)**
-- 🚀 **Normalization Proof (T4 Bonus)** - See `JUDGING.md` for mathematical proofs and Bootstrap Confidence Intervals.
-- 🛡️ **Security Threat Model & RBAC** - See `THREAT-MODEL.md` for our zero-trust implementation details.
-- 🔌 **API-First Design** - See `openapi.yaml` for our OpenAPI 3.0 specification mapping all UI interactions to JSON endpoints.
+- **Advanced Pairwise Mode (T3 Bonus)**
+- **Normalization Proof (T4 Bonus)** - See `JUDGING.md` for mathematical proofs and Bootstrap Confidence Intervals.
+- **Security Threat Model & RBAC** - See `THREAT-MODEL.md` for our zero-trust implementation details.
+- **API-First Design** - See `openapi.yaml` for our OpenAPI 3.0 specification mapping all UI interactions to JSON endpoints.
 
 ## Implementation & Licensing
 Built with Go 1.22 and `modernc.org/sqlite` (CGO-free SQLite). No external dependencies. No C-toolchain required.
