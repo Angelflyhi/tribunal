@@ -1,0 +1,44 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Tribunal</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body style="justify-content: center; align-items: center; min-height: 100vh; display: flex; padding: var(--space-4);">
+    <div class="auth-container w-full">
+        <div class="card auth-card">
+            <div class="auth-header">
+                <div class="brand mb-4" style="display: flex; justify-content: center;"><a href="/" style="pointer-events: none; text-decoration: none;">
+                    <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--accent), var(--info)); color: white; border-radius: var(--radius-md); font-size: 1.5rem; font-weight: bold; display: flex; align-items: center; justify-content: center; margin: 0 auto;">T</div>
+                </a></div>
+                <h1>Create Account</h1>
+                <p>Join the Dogfood 2026 hackathon</p>
+            </div>
+            
+            <form action="/register" method="POST">
+                <div>
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" name="email" required placeholder="you@example.com" class="mt-2">
+                </div>
+                <div>
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required placeholder="••••••••" class="mt-2">
+                </div>
+                <button type="submit" class="btn-primary w-full mt-4" style="padding: 0.75rem;">Register</button>
+            </form>
+            
+            <div class="text-center mt-6" style="font-size: 0.9rem;">
+                <span style="color: var(--text-muted);">Already have an account?</span> 
+                <a href="/login" style="font-weight: 500;">Sign in</a>
+            </div>
+            <div class="text-center mt-4">
+                <a href="/projects" style="font-size: 0.85rem; color: var(--text-muted);">← Back to Gallery</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,23 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Database
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Temp
+*.log
+*.tmp
+*.out
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

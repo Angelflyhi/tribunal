@@ -1,0 +1,38 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tribunal · Dogfood 2026</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <nav>
+        <div class="brand"><a href="/projects">Tribunal</a></div>
+        <div class="nav-links">
+            <a href="/projects">Gallery</a>
+            {{if .User}}
+                <a href="/dashboard">Dashboard</a>
+                {{if eq .User.Role "participant"}}
+                    <a href="/projects/new">Submit Project</a>
+                {{end}}
+                <span class="badge role-{{.User.Role}}">
+                    👤 {{.User.Email}} ({{.User.Role}})
+                </span>
+                <a href="/logout" class="btn btn-secondary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;">Logout</a>
+            {{else}}
+                <a href="/login">Login</a>
+                <a href="/register" class="btn btn-primary">Register</a>
+            {{end}}
+        </div>
+    </nav>
+    <main>
+        {{template "content" .}}
+    </main>
+    <footer>
+        <p>Built for Dogfood 2026 · Tribunal Judging Platform</p>
+    </footer>
+</body>
+</html>
+{{end}}

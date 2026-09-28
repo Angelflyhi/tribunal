@@ -1,0 +1,120 @@
+openapi: 3.0.3
+info:
+  title: Tribunal API
+  description: API for the Tribunal Hackathon Platform (Dogfood 2026).
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+
+paths:
+  /api/judge/scores:
+    get:
+      summary: Get Judge Scores
+      description: Returns a list of all scores submitted by the authenticated judge. Judges cannot see other judges' scores.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: A JSON array of scores
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scores:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        project_id:
+                          type: string
+                          format: uuid
+                        criteria:
+                          type: string
+                          description: JSON string containing rubric data
+                        comment:
+                          type: string
+        '403':
+          description: Forbidden (Role isolation violation)
+
+  /api/export.csv:
+    get:
+      summary: Export Data
+      description: Returns a denormalized CSV of all projects, teams, and scores for offline analysis.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: CSV file contents
+          content:
+            text/csv:
+              schema:
+                type: string
+        '403':
+          description: Forbidden (Requires Organizer role)
+
+  /judge/pairwise:
+    post:
+      summary: Submit Pairwise Comparison
+      description: Submits a Bradley-Terry winner/loser comparison.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                winner_id:
+                  type: string
+                  format: uuid
+                loser_id:
+                  type: string
+                  format: uuid
+              required:
+                - winner_id
+                - loser_id
+      responses:
+        '303':
+          description: Redirects back to the next pairwise comparison
+
+  /projects/new:
+    post:
+      summary: Submit Project
+      description: Creates a new project submission. Enforces event deadlines.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                summary:
+                  type: string
+                repo_url:
+                  type: string
+                  format: uri
+                track_id:
+                  type: string
+              required:
+                - title
+                - summary
+                - track_id
+      responses:
+        '303':
+          description: Redirects to dashboard
+        '400':
+          description: Bad Request (Event is closed for submissions)

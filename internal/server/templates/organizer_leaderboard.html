@@ -1,0 +1,45 @@
+{{define "content"}}
+<div class="hero" style="padding: var(--space-8) 0; margin-bottom: var(--space-6);">
+    <h1>Live Leaderboard</h1>
+    <p>Real-time standings based on Bradley-Terry Elo ratings.</p>
+</div>
+
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div style="overflow-x: auto;">
+        <table class="leaderboard-table">
+            <thead>
+                <tr>
+                    <th style="width: 80px; text-align: center;">Rank</th>
+                    <th>Project</th>
+                    <th>Track</th>
+                    <th style="text-align: right;">Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .RankedProjects}}
+                <tr class="rank-{{.Rank}}">
+                    <td style="text-align: center;">
+                        <span class="rank-badge">{{.Rank}}</span>
+                    </td>
+                    <td>
+                        <strong>{{.Title}}</strong>
+                    </td>
+                    <td>
+                        <span class="badge">{{.TrackName}}</span>
+                    </td>
+                    <td style="text-align: right; font-family: var(--font-mono); font-weight: bold; color: var(--accent);">
+                        {{printf "%.1f" .Score}}
+                    </td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: var(--space-8); color: var(--text-muted);">
+                        No rankings available yet.
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}

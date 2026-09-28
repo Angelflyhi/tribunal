@@ -1,0 +1,26 @@
+{{define "content"}}
+<div class="hero">
+    <h1>Project Gallery</h1>
+    <p>Discover the amazing hacks built during Dogfood 2026.</p>
+    {{if and .User (eq .User.Role "participant")}}
+        <div class="mt-6">
+            <a href="/projects/new" class="btn btn-primary">➕ Submit Your Project</a>
+        </div>
+    {{end}}
+</div>
+
+<div class="projects-grid">
+    {{range .Projects}}
+    <div class="card project-card">
+        <h3>{{.Title}}</h3>
+        <div class="badge mb-4">{{.TrackName}}</div>
+        <p>{{.Summary}}</p>
+    </div>
+    {{else}}
+    <div class="card" style="grid-column: 1 / -1; text-align: center; padding: var(--space-12);">
+        <h3 style="color: var(--text-muted);">No projects submitted yet</h3>
+        <p>Check back later or submit your own!</p>
+    </div>
+    {{end}}
+</div>
+{{end}}

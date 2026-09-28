@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  tribunal:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - tribunal_data:/data
+      - ./fixtures.json:/fixtures.json
+    environment:
+      - PORT=8080
+      - DB_PATH=/data/dogfood.sqlite
+      - FIXTURES_PATH=/fixtures.json
+volumes:
+  tribunal_data:

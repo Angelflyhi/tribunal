@@ -1,0 +1,23 @@
+{{define "content"}}
+<div style="margin-bottom: 2rem;">
+    <h1>Standard Rubric Scoring</h1>
+    <p>Select a project from your assigned tracks to evaluate.</p>
+</div>
+
+<div class="projects-grid">
+    {{range .Projects}}
+    <div class="card project-card">
+        <h3>{{.Title}}</h3>
+        <p>{{.Summary}}</p>
+        <div class="badge">{{.TrackName}}</div>
+        
+        <form action="/judge/rubric/score" method="GET" style="margin-top: 1rem;">
+            <input type="hidden" name="project_id" value="{{.ID}}">
+            <button type="submit" style="width: 100%;">Evaluate Project</button>
+        </form>
+    </div>
+    {{else}}
+    <p>No projects found in your assigned tracks.</p>
+    {{end}}
+</div>
+{{end}}

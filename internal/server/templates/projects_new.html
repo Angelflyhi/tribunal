@@ -1,0 +1,28 @@
+{{define "content"}}
+<div class="card" style="max-width: 600px; margin: 2rem auto;">
+    <h2>Submit Project</h2>
+    {{if .Error}}
+        <div style="color: red; margin-bottom: 1rem;">{{.Error}}</div>
+    {{end}}
+    <form action="/projects/new" method="POST">
+        <label for="title">Project Title</label>
+        <input type="text" id="title" name="title" required>
+        
+        <label for="summary">Summary</label>
+        <textarea id="summary" name="summary" rows="4" required></textarea>
+        
+        <label for="repo_url">Repository URL</label>
+        <input type="url" id="repo_url" name="repo_url" required>
+        
+        <label for="track_id">Track</label>
+        <select id="track_id" name="track_id" required>
+            <option value="" disabled selected>Select a track</option>
+            {{range .Tracks}}
+            <option value="{{.ID}}">{{.Name}}</option>
+            {{end}}
+        </select>
+        
+        <button type="submit" style="width: 100%;">Submit Draft</button>
+    </form>
+</div>
+{{end}}

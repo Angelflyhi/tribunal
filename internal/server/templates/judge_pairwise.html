@@ -1,0 +1,62 @@
+{{define "content"}}
+<div class="text-center mb-8">
+    <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem;">Pairwise Judging</h1>
+    <p>Bradley-Terry Comparison Mode</p>
+    <p style="color: var(--text-muted); font-size: 0.9rem;">Review the projects carefully and select the stronger submission.</p>
+</div>
+
+{{if and .ProjectA .ProjectB}}
+<div class="pairwise-container" style="display: flex; gap: 2rem; align-items: stretch; margin-top: var(--space-8);">
+    <div class="card fight-card" style="flex: 1; display: flex; flex-direction: column;">
+        <div class="mb-4">
+            <span class="badge" style="background: rgba(255,255,255,0.1); border-color: transparent;">Corner A</span>
+        </div>
+        <h2 style="font-size: 1.75rem;">{{.ProjectA.Title}}</h2>
+        <div class="badge mb-4">{{.ProjectA.TrackName}}</div>
+        <div style="flex-grow: 1; background: var(--bg-surface); padding: var(--space-4); border-radius: var(--radius-md); margin-bottom: var(--space-4);">
+            <p style="margin:0; color: var(--text-primary);">{{.ProjectA.Summary}}</p>
+        </div>
+        
+        {{if .ProjectA.RepoURL}}
+            <a href="{{.ProjectA.RepoURL}}" target="_blank" class="btn btn-secondary mb-4 w-full">📦 View Repository &rarr;</a>
+        {{end}}
+        
+        <form action="/judge/pairwise" method="POST" style="margin-top: auto;">
+            <input type="hidden" name="winner_id" value="{{.ProjectA.ID}}">
+            <input type="hidden" name="loser_id" value="{{.ProjectB.ID}}">
+            <button type="submit" class="btn-primary w-full" style="font-size: 1.1rem; padding: 1rem;">🏆 Project A Wins</button>
+        </form>
+    </div>
+    
+    <div class="vs-divider">VS</div>
+    
+    <div class="card fight-card" style="flex: 1; display: flex; flex-direction: column;">
+        <div class="mb-4">
+            <span class="badge" style="background: rgba(255,255,255,0.1); border-color: transparent;">Corner B</span>
+        </div>
+        <h2 style="font-size: 1.75rem;">{{.ProjectB.Title}}</h2>
+        <div class="badge mb-4">{{.ProjectB.TrackName}}</div>
+        <div style="flex-grow: 1; background: var(--bg-surface); padding: var(--space-4); border-radius: var(--radius-md); margin-bottom: var(--space-4);">
+            <p style="margin:0; color: var(--text-primary);">{{.ProjectB.Summary}}</p>
+        </div>
+        
+        {{if .ProjectB.RepoURL}}
+            <a href="{{.ProjectB.RepoURL}}" target="_blank" class="btn btn-secondary mb-4 w-full">📦 View Repository &rarr;</a>
+        {{end}}
+        
+        <form action="/judge/pairwise" method="POST" style="margin-top: auto;">
+            <input type="hidden" name="winner_id" value="{{.ProjectB.ID}}">
+            <input type="hidden" name="loser_id" value="{{.ProjectA.ID}}">
+            <button type="submit" class="btn-primary w-full" style="font-size: 1.1rem; padding: 1rem;">🏆 Project B Wins</button>
+        </form>
+    </div>
+</div>
+{{else}}
+<div class="card text-center" style="max-width: 500px; margin: 4rem auto; padding: 4rem 2rem;">
+    <div style="font-size: 4rem; margin-bottom: 1rem;">🏁</div>
+    <h2>All Done!</h2>
+    <p>You have completed all available pairwise comparisons for now.</p>
+    <a href="/dashboard" class="btn btn-secondary mt-4">Back to Dashboard</a>
+</div>
+{{end}}
+{{end}}
