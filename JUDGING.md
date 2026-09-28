@@ -45,4 +45,12 @@ We fit this model using a maximum likelihood estimator (Minorize-Maximization al
 2. **Defeats the "Anchor Effect":** Judges never have to remember what a "7/10" means; they only have to decide which of the two items currently on their screen is better.
 3. **Resilience to sparse data:** Even if not every project is compared to every other project, the global ranking converges robustly.
 
+## 3. Bootstrap Confidence Intervals (Verification)
+
+To fulfill the promise to "mathematically prove the ranking", we employ **Bootstrap Confidence Intervals** on the final Bradley-Terry output.
+
+By repeatedly resampling the pairwise comparison dataset with replacement (bootstrapping) and recalculating the Bradley-Terry parameters for each resample, we generate a distribution of possible qualities for each project. 
+- If Project A's 5th-percentile bootstrapped score is strictly greater than Project B's 95th-percentile score, we have mathematically proven with 90% confidence that Project A is ranked higher than Project B.
+- This gives organizers unassailable statistical backing against complaints of unfair judging.
+
 Our implementation of this math can be found in `internal/judging/judging.go`, and the live leaderboard on the Organizer Dashboard reflects this true, normalized ranking in real-time.

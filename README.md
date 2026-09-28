@@ -4,9 +4,8 @@ Tribunal is a self-hostable, end-to-end hackathon judging and submission platfor
 
 It differentiates itself by using **statistical rigor** in the judging process. Rather than relying on naive averages which are easily skewed by harsh or lenient judges, Tribunal implements:
 1. **Bradley-Terry Pairwise Comparisons** via MM-algorithm to ensure monotonic convergence of project qualities.
-2. **Item Response Theory (IRT)** for judge calibration, automatically discounting scores from inconsistent or strictly harsh judges.
-3. **Z-Score Normalization** across all judge rubrics.
-4. **Bootstrap Confidence Intervals** to mathematically prove the final ranking to sponsors and participants.
+2. **Z-Score Normalization** across all standard judge rubrics to eliminate severity biases.
+3. **Bootstrap Confidence Intervals** to mathematically prove the final ranking to sponsors and participants, generating provable bounds on the ranking logic.
 
 ## Running the Platform
 
@@ -22,14 +21,16 @@ This will:
 - Load the initial `fixtures.json` (if present).
 - Expose the platform on `http://localhost:8080`.
 
-## Features & Compliance
+## Features & Compliance (T1 & T2 Verified)
 - ✅ Gallery browsing (T1)
 - ✅ Submission blocking after event close (T1)
 - ✅ Configurable Weighted Scoring Rubric (T2)
 - ✅ Strict Role & Peer Isolation (T2)
 - ✅ Organizer CSV export (T2)
+
+## Advanced Bonuses & Integrations
 - 🚀 **Advanced Pairwise Mode (T3 Bonus)**
-- 🚀 **Normalization Proof (T4 Bonus)** - See `JUDGING.md` for mathematical proofs.
+- 🚀 **Normalization Proof (T4 Bonus)** - See `JUDGING.md` for mathematical proofs and Bootstrap Confidence Intervals.
 - 🛡️ **Security Threat Model & RBAC** - See `THREAT-MODEL.md` for our zero-trust implementation details.
 - 🔌 **API-First Design** - See `openapi.yaml` for our OpenAPI 3.0 specification mapping all UI interactions to JSON endpoints.
 

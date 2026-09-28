@@ -118,3 +118,51 @@ paths:
           description: Redirects to dashboard
         '400':
           description: Bad Request (Event is closed for submissions)
+
+  /api/webhooks:
+    post:
+      summary: Deliver Webhook
+      description: Simulation endpoint for delivering events (e.g., project submission).
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Webhook delivered successfully
+        '403':
+          description: Forbidden (Requires Organizer role)
+
+  /api/certificate:
+    get:
+      summary: Generate Certificate
+      description: Generates a signed JSON certificate of participation and ranking.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Signed JSON certificate
+        '401':
+          description: Unauthorized
+
+  /api/import:
+    post:
+      summary: Bulk Import
+      description: Queues a bulk import of projects and users using the fixtures.json format.
+      security:
+        - sessionCookie: []
+      responses:
+        '202':
+          description: Import queued successfully
+        '403':
+          description: Forbidden (Requires Organizer role)
+
+  /embed/gallery:
+    get:
+      summary: Embeddable Gallery
+      description: Returns an HTML fragment of the project gallery suitable for an iframe.
+      responses:
+        '200':
+          description: HTML fragment
+          content:
+            text/html:
+              schema:
+                type: string

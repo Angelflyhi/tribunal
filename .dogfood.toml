@@ -2,8 +2,8 @@
 base_url = "http://localhost:8080"
 
 [tiers]
-claimed = ["T1", "T2", "T3", "T4"]
-pitch = "Tribunal: a statistically rigorous hackathon judging platform with Z-score normalization, Bradley-Terry pairwise comparison, and IRT judge calibration. Single Go binary, CGO-free SQLite, zero external dependencies, fully offline."
+claimed = ["T1", "T2"]
+pitch = "Tribunal: a statistically rigorous hackathon judging platform with Z-score normalization and Bradley-Terry pairwise comparison. Single Go binary, CGO-free SQLite, zero external dependencies, fully offline."
 
 [auth]
 organizer   = "Cookie: session=org_7f2a"
