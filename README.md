@@ -8,8 +8,8 @@ Tribunal is a high-performance, single-binary, cryptographically secure hackatho
 
 - **T1: Core Operations**: Secure role-based access control, project submissions, and tracking.
 - **T2: Judging & Export**: Algorithmic judge assignments, tamper-evident cryptographic audit logs, CSV exports.
-- **T3: Public Surface**: Quadratic community voting, rate-limited public comments, embeddable UI.
-- **T4: Complete Chain**: Signed results bundle (`results.json`, `manifest.json`, `audit-anchor.json`), lossless SQLite import/export, and CLI bundle verification.
+- **T3: Advanced Judging Engine**: Bradley-Terry Pairwise ranking algorithm (Minorization-Maximization), Item Response Theory (IRT) judge calibration, Leave-One-Out (LOO) influence anomaly detection, and Bootstrap Confidence Intervals.
+- **T4: Verifiable Audit Trail**: Cryptographically chained audit logs, signed results bundles (`results.json`, `manifest.json`, `audit-anchor.json`), and mathematical CLI bundle re-verification directly from audit logs.
 
 ## Architecture
 

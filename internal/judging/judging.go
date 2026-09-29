@@ -109,8 +109,8 @@ func CalibratedScore(judges []JudgeScore) float64 {
 }
 
 // FitBradleyTerry uses the MM algorithm to estimate item qualities from pairwise comparison counts.
-// wins[i][j] is the number of times project i beat project j.
-func FitBradleyTerry(wins [][]int, n int) []float64 {
+// wins[i][j] is the weighted number of times project i beat project j.
+func FitBradleyTerry(wins [][]float64, n int) []float64 {
 	pi := make([]float64, n)
 	for i := range pi {
 		pi[i] = 1.0
@@ -119,7 +119,7 @@ func FitBradleyTerry(wins [][]int, n int) []float64 {
 	W := make([]float64, n)
 	for i := 0; i < n; i++ {
 		for j := 0; j < n; j++ {
-			W[i] += float64(wins[i][j])
+			W[i] += wins[i][j]
 		}
 	}
 
@@ -133,7 +133,7 @@ func FitBradleyTerry(wins [][]int, n int) []float64 {
 				if i == j {
 					continue
 				}
-				nij := float64(wins[i][j] + wins[j][i])
+				nij := wins[i][j] + wins[j][i]
 				if nij == 0 {
 					continue
 				}
@@ -177,7 +177,7 @@ func FitBradleyTerry(wins [][]int, n int) []float64 {
 
 // IsComparisonGraphConnected checks if the comparison graph is strongly connected,
 // a requirement for Bradley-Terry convergence.
-func IsComparisonGraphConnected(wins [][]int, n int) bool {
+func IsComparisonGraphConnected(wins [][]float64, n int) bool {
 	if n == 0 {
 		return true
 	}
@@ -229,7 +229,7 @@ func computeRanks(scores []float64) []int {
 
 // BootstrapConfidenceIntervals estimates the 90% confidence bounds (5th and 95th percentiles)
 // for the rank of each project by resampling the pairwise comparisons with replacement.
-func BootstrapConfidenceIntervals(wins [][]int, n int, iterations int) []RankInterval {
+func BootstrapConfidenceIntervals(wins [][]float64, n int, iterations int) []RankInterval {
 	if n == 0 {
 		return nil
 	}
@@ -238,7 +238,8 @@ func BootstrapConfidenceIntervals(wins [][]int, n int, iterations int) []RankInt
 	var allComparisons [][2]int
 	for i := 0; i < n; i++ {
 		for j := 0; j < n; j++ {
-			for k := 0; k < wins[i][j]; k++ {
+			count := int(math.Round(wins[i][j]))
+			for k := 0; k < count; k++ {
 				allComparisons = append(allComparisons, [2]int{i, j})
 			}
 		}
@@ -258,9 +259,9 @@ func BootstrapConfidenceIntervals(wins [][]int, n int, iterations int) []RankInt
 
 	for iter := 0; iter < iterations; iter++ {
 		// Resample with replacement
-		resampledWins := make([][]int, n)
+		resampledWins := make([][]float64, n)
 		for i := 0; i < n; i++ {
-			resampledWins[i] = make([]int, n)
+			resampledWins[i] = make([]float64, n)
 		}
 
 		for i := 0; i < totalComps; i++ {
@@ -306,7 +307,7 @@ type JudgeInfluence struct {
 // LeaveOneOutJudgeInfluence estimates the robustness of the Bradley-Terry ranking
 // by computing how much the final ranking changes if a specific judge's comparisons
 // are removed.
-func LeaveOneOutJudgeInfluence(wins [][]int, n int, judgeComparisons map[string][][2]int) []JudgeInfluence {
+func LeaveOneOutJudgeInfluence(wins [][]float64, n int, judgeComparisons map[string][][2]int) []JudgeInfluence {
 	if n == 0 {
 		return nil
 	}
@@ -319,9 +320,9 @@ func LeaveOneOutJudgeInfluence(wins [][]int, n int, judgeComparisons map[string]
 
 	for judgeID, comparisons := range judgeComparisons {
 		// Clone wins and remove this judge's comparisons
-		looWins := make([][]int, n)
+		looWins := make([][]float64, n)
 		for i := 0; i < n; i++ {
-			looWins[i] = make([]int, n)
+			looWins[i] = make([]float64, n)
 			copy(looWins[i], wins[i])
 		}
 
@@ -352,4 +353,53 @@ func LeaveOneOutJudgeInfluence(wins [][]int, n int, judgeComparisons map[string]
 	}
 
 	return influences
+}
+
+// EstimateIRTParameters computes a rough approximation of IRT Discrimination and Severity 
+// for judges based on their pairwise comparisons, relative to a baseline consensus ranking.
+func EstimateIRTParameters(judgeComparisons map[string][][2]int, consensusScores []float64, n int) (map[string]float64, map[string]float64) {
+	discriminations := make(map[string]float64)
+	severities := make(map[string]float64)
+
+	for judgeID, comps := range judgeComparisons {
+		if len(comps) == 0 {
+			discriminations[judgeID] = 1.0
+			severities[judgeID] = 0.0
+			continue
+		}
+
+		var sumDiff float64
+		var sumAbsDiff float64
+		
+		for _, comp := range comps {
+			winner, loser := comp[0], comp[1]
+			// The score difference between the winner and loser in the consensus ranking
+			diff := consensusScores[winner] - consensusScores[loser]
+			sumDiff += diff
+			sumAbsDiff += math.Abs(diff)
+		}
+
+		// Discrimination: How well do their choices align with the consensus?
+		// Positive if they pick the consensus winner, negative if they pick the consensus loser.
+		var discrimination float64
+		if sumAbsDiff > 0 {
+			discrimination = sumDiff / sumAbsDiff
+		} else {
+			discrimination = 0.0
+		}
+
+		// Map to a weight [0.1, 2.0]
+		weight := 1.0 + discrimination
+		if weight < 0.1 {
+			weight = 0.1
+		}
+		if weight > 2.0 {
+			weight = 2.0
+		}
+		
+		discriminations[judgeID] = weight
+		severities[judgeID] = 0.0 // Severity doesn't easily translate to unanchored pairwise comparisons
+	}
+
+	return discriminations, severities
 }

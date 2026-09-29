@@ -163,6 +163,14 @@ func createSchema(db *sql.DB) {
 		secret TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS judge_metrics (
+		judge_id TEXT PRIMARY KEY,
+		severity FLOAT NOT NULL,
+		discrimination FLOAT NOT NULL,
+		anomaly_flag TEXT,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
 	`
 
 	_, err := db.Exec(schema)
@@ -181,7 +189,7 @@ func (d *DB) LogAudit(eventID, actorID, action, subjectType, subjectID string, p
 
 	// Fetch previous hash
 	var prevHash string
-	err = d.QueryRow("SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1").Scan(&prevHash)
+	err = d.QueryRow("SELECT hash FROM audit_log WHERE event_id = ? ORDER BY id DESC LIMIT 1", eventID).Scan(&prevHash)
 	if err == sql.ErrNoRows {
 		prevHash = "0000000000000000000000000000000000000000000000000000000000000000"
 	} else if err != nil {

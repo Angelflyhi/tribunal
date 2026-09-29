@@ -4,11 +4,13 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -252,6 +254,13 @@ type RankedProject struct {
 	CIUpper    int
 }
 
+type JudgeMetric struct {
+	JudgeID        string
+	Severity       float64
+	Discrimination float64
+	AnomalyFlag    string
+}
+
 type PageData struct {
 	User           *User
 	Projects       []ProjectView
@@ -265,6 +274,7 @@ type PageData struct {
 	ProjectB       *ProjectView
 	RankedProjects []RankedProject
 	JudgeInfluences []judging.JudgeInfluence
+	JudgeMetrics    []JudgeMetric
 }
 
 func (s *Server) handleGallery(w http.ResponseWriter, r *http.Request) {
@@ -337,11 +347,9 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if hash != "hash" { // Handle seeded dummy users
-		if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
-			tmpl["login"].ExecuteTemplate(w, "base", PageData{Error: "Invalid email or password"})
-			return
-		}
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
+		tmpl["login"].ExecuteTemplate(w, "base", PageData{Error: "Invalid email or password"})
+		return
 	}
 
 	token := generateToken()
@@ -370,11 +378,9 @@ func (s *Server) handleRegisterGet(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRegisterPost(w http.ResponseWriter, r *http.Request) {
 	email := r.FormValue("email")
 	password := r.FormValue("password")
-	role := r.FormValue("role")
-
-	if role != "participant" && role != "judge" && role != "organizer" {
-		role = "participant"
-	}
+	// Public registration is strictly for participants.
+	// Judges and organizers are created via administrative processes or fixtures.
+	role := "participant"
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -689,23 +695,7 @@ func (s *Server) handleExportBundle(w http.ResponseWriter, r *http.Request) {
 	}
 	projIdx := make(map[string]int)
 	for i, p := range projects { projIdx[p.ID] = i }
-	wins := make([][]int, len(projects))
-	for i := range wins { wins[i] = make([]int, len(projects)) }
-	
-	compRows, _ := s.db.Query("SELECT winner_id, loser_id FROM pairwise_comparisons")
-	for compRows.Next() {
-		var wID, lID string
-		if err := compRows.Scan(&wID, &lID); err == nil {
-			if wIdx, ok1 := projIdx[wID]; ok1 {
-				if lIdx, ok2 := projIdx[lID]; ok2 {
-					wins[wIdx][lIdx]++
-				}
-			}
-		}
-	}
-	compRows.Close()
-
-	scores := judging.FitBradleyTerry(wins, len(projects))
+	_, scores, _ := s.computeAdvancedRankings(projects, projIdx)
 	var ranked []RankedProject
 	for i, p := range projects {
 		ranked = append(ranked, RankedProject{
@@ -733,12 +723,12 @@ func (s *Server) handleExportBundle(w http.ResponseWriter, r *http.Request) {
 		"issuer":       "Tribunal Engine T4",
 		"version":      "1.0",
 	}
-	// Sign manifest with HMAC using a known secret (or event ID)
-	var eventID string
-	s.db.QueryRow("SELECT id FROM events LIMIT 1").Scan(&eventID)
-	mac := hmac.New(sha256.New, []byte(eventID))
-	mac.Write([]byte(manifest["results_hash"] + manifest["anchor_hash"]))
-	manifest["signature"] = hex.EncodeToString(mac.Sum(nil))
+	// Sign manifest with Ed25519
+	priv, pub := s.db.GenerateOrLoadKeyPair()
+	msg := []byte(manifest["results_hash"] + manifest["anchor_hash"])
+	sig := ed25519.Sign(priv, msg)
+	manifest["signature"] = hex.EncodeToString(sig)
+	manifest["public_key"] = base64.StdEncoding.EncodeToString(pub) // Optional: include it
 	manifestJSON, _ := json.MarshalIndent(manifest, "", "  ")
 
 	w.Header().Set("Content-Type", "application/zip")
@@ -756,7 +746,7 @@ func (s *Server) handleExportBundle(w http.ResponseWriter, r *http.Request) {
 	f3.Write(manifestJSON)
 	
 	zw.Close()
-	s.db.Exec("INSERT INTO audit_logs (action, identity, details) VALUES (?, ?, ?)", "export_bundle", user.Email, "Exported T4 Signed Bundle")
+	s.logAuditHelper(user.Email, "export_bundle", "bundle", "system", "Exported T4 Signed Bundle")
 }
 
 func (s *Server) handleEditProjectGet(w http.ResponseWriter, r *http.Request) {
@@ -933,7 +923,16 @@ func (s *Server) handleJudgePairwisePost(w http.ResponseWriter, r *http.Request)
 	loserID := r.FormValue("loser_id")
 
 	if winnerID != "" && loserID != "" {
-		s.db.Exec("INSERT INTO pairwise_comparisons (judge_id, winner_id, loser_id) VALUES (?, ?, ?)", user.RefID, winnerID, loserID)
+		// Validate that both projects were assigned to this judge
+		var count int
+		err := s.db.QueryRow("SELECT COUNT(*) FROM judge_assignments WHERE judge_id = ? AND project_id IN (?, ?)", user.RefID, winnerID, loserID).Scan(&count)
+		if err == nil && count == 2 {
+			s.db.Exec("INSERT INTO pairwise_comparisons (judge_id, winner_id, loser_id) VALUES (?, ?, ?)", user.RefID, winnerID, loserID)
+			s.logAuditHelper(user.RefID, "pairwise_vote", "pairwise_comparison", winnerID, map[string]string{
+				"winner_id": winnerID,
+				"loser_id":  loserID,
+			})
+		}
 	}
 
 	http.Redirect(w, r, "/judge/pairwise", http.StatusSeeOther)
@@ -1002,29 +1001,7 @@ func (s *Server) handleOrganizerLeaderboard(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Fetch comparisons
-	compRows, _ := s.db.Query("SELECT winner_id, loser_id FROM pairwise_comparisons")
-	
-	wins := make([][]int, n)
-	for i := range wins {
-		wins[i] = make([]int, n)
-	}
-
-	if compRows != nil {
-		defer compRows.Close()
-		for compRows.Next() {
-			var wID, lID string
-			if err := compRows.Scan(&wID, &lID); err == nil {
-				if wi, wok := projIdx[wID]; wok {
-					if li, lok := projIdx[lID]; lok {
-						wins[wi][li]++
-					}
-				}
-			}
-		}
-	}
-
-	// Call Bradley-Terry
-	qualities := judging.FitBradleyTerry(wins, n)
+	wins, qualities, _ := s.computeAdvancedRankings(projects, projIdx)
 	intervals := judging.BootstrapConfidenceIntervals(wins, n, 500)
 
 	var ranked []RankedProject
@@ -1073,11 +1050,25 @@ func (s *Server) handleOrganizerLeaderboard(w http.ResponseWriter, r *http.Reque
 		return influences[i].MaxRankDiff > influences[j].MaxRankDiff
 	})
 
+	// Fetch judge metrics from DB
+	var metrics []JudgeMetric
+	metricsRows, _ := s.db.Query("SELECT judge_id, severity, discrimination, anomaly_flag FROM judge_metrics")
+	if metricsRows != nil {
+		defer metricsRows.Close()
+		for metricsRows.Next() {
+			var m JudgeMetric
+			if err := metricsRows.Scan(&m.JudgeID, &m.Severity, &m.Discrimination, &m.AnomalyFlag); err == nil {
+				metrics = append(metrics, m)
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	tmpl["organizer_leaderboard"].ExecuteTemplate(w, "base", PageData{
 		User:            user,
 		RankedProjects:  ranked,
 		JudgeInfluences: influences,
+		JudgeMetrics:    metrics,
 	})
 }
 
@@ -1103,7 +1094,7 @@ func (s *Server) handleWebhooks(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "DB Error", http.StatusInternalServerError)
 		return
 	}
-	s.db.Exec("INSERT INTO audit_logs (action, identity, details) VALUES (?, ?, ?)", "configure_webhook", user.Email, "Configured webhook for "+payload.Event)
+	s.logAuditHelper(user.Email, "configure_webhook", "webhook", "system", "Configured webhook for "+payload.Event)
 
 	// Production-grade webhook delivery in a background goroutine
 	go func(url string, event string) {
@@ -1196,7 +1187,7 @@ func (s *Server) handlePublicVote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.db.Exec("INSERT INTO audit_logs (action, identity, details) VALUES (?, ?, ?)", "public_vote", identity, "Voted for "+projectID)
+	s.logAuditHelper(identity, "public_vote", "project", projectID, "Voted for "+projectID)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"voted"}`))
 }
@@ -1217,7 +1208,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.db.Exec("INSERT INTO comments (project_id, author_identity, content) VALUES (?, ?, ?)", projectID, identity, payload.Content)
-	s.db.Exec("INSERT INTO audit_logs (action, identity, details) VALUES (?, ?, ?)", "add_comment", identity, "Commented on "+projectID)
+	s.logAuditHelper(identity, "add_comment", "project", projectID, "Commented on "+projectID)
 	
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"comment_added"}`))
@@ -1237,9 +1228,16 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var submissionsClose time.Time
+	if err := s.db.QueryRow("SELECT submissions_close FROM events LIMIT 1").Scan(&submissionsClose); err == nil {
+		if time.Now().After(submissionsClose) && user.Role != "organizer" {
+			http.Error(w, "Submissions are closed", http.StatusForbidden)
+			return
+		}
+	}
+
 	var teamID string
-	err := s.db.QueryRow("SELECT team_id FROM projects WHERE id = ?").Scan(&teamID) // FIXED: Missing ID arg here, let's fix
-	err = s.db.QueryRow("SELECT team_id FROM projects WHERE id = ?", projectID).Scan(&teamID)
+	err := s.db.QueryRow("SELECT team_id FROM projects WHERE id = ?", projectID).Scan(&teamID)
 	if err != nil {
 		http.Error(w, "Project not found", http.StatusNotFound)
 		return
@@ -1258,7 +1256,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.db.Exec("INSERT INTO audit_logs (action, identity, details) VALUES (?, ?, ?)", "update_project", user.Email, "Updated project "+projectID)
+	s.logAuditHelper(user.Email, "update_project", "project", projectID, "Updated project "+projectID)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"updated"}`))
 }
@@ -1266,6 +1264,14 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	user := r.Context().Value(userContextKey).(*User)
+
+	var submissionsClose time.Time
+	if err := s.db.QueryRow("SELECT submissions_close FROM events LIMIT 1").Scan(&submissionsClose); err == nil {
+		if time.Now().After(submissionsClose) && user.Role != "organizer" {
+			http.Error(w, "Submissions are closed", http.StatusForbidden)
+			return
+		}
+	}
 
 	if user.Role != "organizer" {
 		var teamID string
@@ -1282,7 +1288,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.db.Exec("DELETE FROM projects WHERE id = ?", projectID)
-	s.db.Exec("INSERT INTO audit_logs (action, identity, details) VALUES (?, ?, ?)", "delete_project", user.Email, "Deleted project "+projectID)
+	s.logAuditHelper(user.Email, "delete_project", "project", projectID, "Deleted project "+projectID)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"deleted"}`))
 }
@@ -1351,26 +1357,7 @@ func (s *Server) handlePublicResults(w http.ResponseWriter, r *http.Request) {
 		projIdx[p.ID] = i
 	}
 
-	wins := make([][]int, len(projects))
-	for i := range wins {
-		wins[i] = make([]int, len(projects))
-	}
-
-	compRows, _ := s.db.Query("SELECT winner_id, loser_id FROM pairwise_comparisons")
-	defer compRows.Close()
-
-	for compRows.Next() {
-		var wID, lID string
-		if err := compRows.Scan(&wID, &lID); err == nil {
-			if wIdx, ok1 := projIdx[wID]; ok1 {
-				if lIdx, ok2 := projIdx[lID]; ok2 {
-					wins[wIdx][lIdx]++
-				}
-			}
-		}
-	}
-
-	scores := judging.FitBradleyTerry(wins, len(projects))
+	_, scores, _ := s.computeAdvancedRankings(projects, projIdx)
 	
 	// Add public votes
 	voteRows, _ := s.db.Query("SELECT project_id, COUNT(*) FROM public_votes GROUP BY project_id")
@@ -1455,7 +1442,7 @@ func (s *Server) handleBulkImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.db.Exec("INSERT INTO audit_logs (action, identity, details) VALUES (?, ?, ?)", "bulk_import", user.Email, "Imported projects")
+	s.logAuditHelper(user.Email, "bulk_import", "project", "all", "Imported projects")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"import_completed"}`))
 }
@@ -1485,4 +1472,76 @@ func (s *Server) handleEmbedGallery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Write([]byte(`</body></html>`))
+}
+
+func (s *Server) logAuditHelper(actorID, action, subjectType, subjectID string, payload interface{}) {
+	var eventID string
+	if err := s.db.QueryRow("SELECT id FROM events LIMIT 1").Scan(&eventID); err == nil {
+		s.db.LogAudit(eventID, actorID, action, subjectType, subjectID, payload)
+	}
+}
+
+func (s *Server) computeAdvancedRankings(projects []ProjectView, projIdx map[string]int) ([][]float64, []float64, error) {
+	n := len(projects)
+	
+	// 1. Gather all comparisons
+	compRows, err := s.db.Query("SELECT judge_id, winner_id, loser_id FROM pairwise_comparisons")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer compRows.Close()
+
+	judgeComps := make(map[string][][2]int)
+	baselineWins := make([][]float64, n)
+	for i := 0; i < n; i++ {
+		baselineWins[i] = make([]float64, n)
+	}
+
+	for compRows.Next() {
+		var jID, wID, lID string
+		if err := compRows.Scan(&jID, &wID, &lID); err == nil {
+			if wi, wok := projIdx[wID]; wok {
+				if li, lok := projIdx[lID]; lok {
+					judgeComps[jID] = append(judgeComps[jID], [2]int{wi, li})
+					baselineWins[wi][li] += 1.0
+				}
+			}
+		}
+	}
+
+	// 2. Compute unweighted baseline
+	baselineScores := judging.FitBradleyTerry(baselineWins, n)
+
+	// 3. Estimate IRT parameters (Discrimination)
+	discriminations, severities := judging.EstimateIRTParameters(judgeComps, baselineScores, n)
+
+	// Save parameters and flags to DB
+	for jID, disc := range discriminations {
+		sev := severities[jID]
+		anomaly := ""
+		if disc < 0.2 {
+			anomaly = "Low Discrimination"
+		} else if len(judgeComps[jID]) < 3 {
+			anomaly = "Too Few Votes"
+		}
+
+		_, _ = s.db.Exec("INSERT INTO judge_metrics (judge_id, severity, discrimination, anomaly_flag, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(judge_id) DO UPDATE SET severity=excluded.severity, discrimination=excluded.discrimination, anomaly_flag=excluded.anomaly_flag, updated_at=CURRENT_TIMESTAMP", jID, sev, disc, anomaly)
+	}
+
+	// 4. Compute weighted wins matrix
+	weightedWins := make([][]float64, n)
+	for i := 0; i < n; i++ {
+		weightedWins[i] = make([]float64, n)
+	}
+
+	for jID, comps := range judgeComps {
+		weight := discriminations[jID]
+		for _, comp := range comps {
+			weightedWins[comp[0]][comp[1]] += weight
+		}
+	}
+
+	// 5. Final Bradley-Terry computation
+	finalScores := judging.FitBradleyTerry(weightedWins, n)
+	return weightedWins, finalScores, nil
 }

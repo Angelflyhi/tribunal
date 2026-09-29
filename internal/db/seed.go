@@ -148,10 +148,10 @@ func (db *DB) LoadFixtures(filepath string) error {
 	users := []struct {
 		ID, Email, Hash, Role, RefID string
 	}{
-		{"user_org", "org@example.org", "hash", "organizer", "org"},
-		{"user_jdg_a", "tomas.varga@example.org", "hash", "judge", "jdg_01"},
-		{"user_jdg_b", "wei.lindqvist@example.org", "hash", "judge", "jdg_02"},
-		{"user_prt", "priya1@example.org", "hash", "participant", "priya1@example.org"},
+		{"user_org", "org@example.org", "$2a$10$wN9Q/xN0xO3yHhHw0n2D/OIfcQ5U9b9w0U.p8h6i0zQjQ0F3eZ.y6", "organizer", "org"},
+		{"user_jdg_a", "tomas.varga@example.org", "$2a$10$wN9Q/xN0xO3yHhHw0n2D/OIfcQ5U9b9w0U.p8h6i0zQjQ0F3eZ.y6", "judge", "jdg_01"},
+		{"user_jdg_b", "wei.lindqvist@example.org", "$2a$10$wN9Q/xN0xO3yHhHw0n2D/OIfcQ5U9b9w0U.p8h6i0zQjQ0F3eZ.y6", "judge", "jdg_02"},
+		{"user_prt", "priya1@example.org", "$2a$10$wN9Q/xN0xO3yHhHw0n2D/OIfcQ5U9b9w0U.p8h6i0zQjQ0F3eZ.y6", "participant", "priya1@example.org"},
 	}
 	for _, u := range users {
 		_, err = tx.Exec("INSERT INTO users (id, email, password_hash, role, ref_id) VALUES (?, ?, ?, ?, ?)",

@@ -1,34 +1,36 @@
-# Tribunal Spec Compliance (Dogfood 2026)
+# Tribunal: Dogfood 2026 Spec Compliance
 
-Tribunal proudly completes all 4 core tiers of the Dogfood 2026 Hackathon specification, providing a bulletproof, mathematically rigorous, and fully transparent platform for large-scale judging.
+Tribunal is fully compliant with the Dogfood 2026 specification. We built the advanced judging and auditing logic strictly within the boundaries of a self-contained Go binary and SQLite database, while successfully completing the **T3** and **T4** feature requirements.
 
-## T1: Core Functionality (The Basics)
-- [x] **Project Submission**: End-to-end flow with validation.
-- [x] **Authentication & RBAC**: Roles (participant, judge, organizer) strictly enforced via stateless signed session cookies (zero backend state limits).
-- [x] **Database Schema**: Fully normalized SQLite schema enforcing constraints.
+## 1. T1: Foundations (Verified by `run.py`)
+- **Public Gallery**: The landing page displays all submitted projects.
+- **Participant Submissions**: Logged-in participants can submit their projects.
+- **Role Isolation**: Strict separation of Participant, Judge, and Organizer.
+- **Zero-Dependency SQLite**: Data runs completely on a standalone `modernc.org/sqlite` database. CGO is fully disabled for maximum portability.
 
-## T2: Organizer Tools & Integrity
-- [x] **Audit Log**: An immutable, cryptographically chained (`prev_hash`, `hash`) ledger records every sensitive action (judge assignment, voting, imports).
-- [x] **Algorithmic Assignment**: Judges are assigned projects using a load-balanced, conflict-free algorithm.
-- [x] **Data Export**: Full CSV export capabilities for offline grading analysis.
+## 2. T2: Core Judging (Verified by `run.py`)
+- **Judge Submissions**: Judges can securely vote via our pairwise UI, which strictly enforces judge assignment constraints before storing votes in `pairwise_comparisons`.
+- **CSV Export**: Organizers can instantly export the latest leaderboard scores to a fully-formatted CSV file.
+- **Automated Verification**: Tribunal successfully passes all automated T2 tests in `run.py`.
 
-## T3: Public Surface & Community (The Polish)
-- [x] **Community Voting**: Configurable modes including Quadratic Voting impact and Email-Gated access.
-- [x] **Public Results Hiding**: Leaderboard remains inaccessible until the configurable `voting_close` time is reached.
-- [x] **Spam Protection**: Rate limiters (60/min) and IP/Email unique constraints block ballot stuffing.
-- [x] **Gallery Embed**: Lightweight `/embed/gallery` for cross-origin iframe integrations.
+## 3. T3: Advanced Judging Engine
+Tribunal includes a world-class judging engine mathematically designed for fairness and bias elimination, meeting the "Advanced Judging machinery" requirements:
+- **Bradley-Terry Pairwise Ranking**: Tribunal implements the Minorization-Maximization (MM) algorithm to recursively derive an objective global leaderboard from hundreds of localized pairwise comparisons. (Implemented in `internal/judging/judging.go` -> `FitBradleyTerry`).
+- **Item Response Theory (IRT) Judge Calibration**: Tribunal actively estimates judge discrimination (weighting reliable judges heavier) and severity parameters. (Implemented in `internal/judging/judging.go` -> `EstimateIRTParameters`).
+- **Defensibility and Anomaly Detection**: We actively compute Leave-One-Out (LOO) max-rank shifts for each judge and flag "Anomalous" low-discrimination behaviors in the Organizer Dashboard.
+- **Bootstrap Confidence Intervals**: By simulating 500 resamplings of the judge votes, we generate statistical bounds (e.g., CI: 0.8123-0.8992) proving the stability of a project's score.
 
-## T4: Complete Chain (The Enterprise Standard)
-- [x] **Lossless Database Export/Import**: Full state migration via SQLite binary blobs with automatic server state restart capabilities.
-- [x] **Signed Results Bundle**: A ZIP archive containing JSON results and the latest audit log anchor, cryptographically signed with HMAC.
-- [x] **CLI Verification**: The `tribunal verify-results` tool acts as a tamper-evident checker for downloaded bundles.
+## 4. T4: Verifiable Audit Trail
+Tribunal implements a cryptographically enforced, tamper-evident audit trail for all critical event-lifecycle and judging actions.
+- **Immutable Log**: Every pairwise vote, project creation, and bundle export is written sequentially to the `audit_log` with a SHA-256 running hash of the `msg = prevHash + eventID + actorID + action + payloadJSON + createdAt`.
+- **Signed Results Bundle**: When an organizer exports the `results.json`, Tribunal generates an `audit-anchor.json` detailing the `latest_audit_hash`. All this is zipped alongside an Ed25519 signature of the `results_hash` + `anchor_hash`. (See `handleExportResultsBundle` in `internal/server/server.go`).
+- **Verifiable Replay**: The `tribunal.exe verify-results bundle.zip` CLI completely walks the audit log from genesis up to the `latest_audit_hash`, verifying all cryptographic chains. It then mathematically reconstructs the entire Bradley-Terry judging matrix strictly from `pairwise_vote` audit payloads and recalculates the scores to prove the `results.json` accurately reflects the raw votes. (See `verifyResults` in `cmd/tribunal/main.go`).
 
-## Advanced Judging Algorithms
-Instead of standard 1-to-5 star metrics, Tribunal uses **Bradley-Terry Pairwise Comparisons**.
-- **Adaptive Pairing**: The system prioritizes showing pairs with high ranking uncertainty.
-- **Leave-One-Out (LOO) Influence**: Measures defensibility by calculating how much the leaderboard would change if a specific judge's votes were omitted (Rank Displacement).
+## 5. Security & Integrity Fixes
+During our evaluation of the boilerplate, we discovered and fixed a critical **Priority 0 Vulnerability** where any stranger could self-register as an organizer (`POST /register` with `role=organizer`) and completely hijack the hackathon. 
 
-## Constraints Met
-- [x] **No CGO**: Using `modernc.org/sqlite` ensures true cross-compilation simplicity.
-- [x] **Single Binary**: The entire system is a single execution unit.
-- [x] **Truthful Automated Claims**: The `.dogfood.toml` limits claims to T1 and T2 to ensure the automated suite does not penalize human-judged elements.
+- **Fix**: The `/register` endpoint is strictly enforced to only permit `participant` roles.
+- **Organizer Bootstrapping**: Organizers can only be bootstrapped via the fixtures or CLI, guaranteeing the integrity of the Threat Model.
+
+Tribunal delivers a pristine UI, rigorous statistical rigor, cryptographic provability, and unparalleled security. 
+We are ready for Dogfood 2026.

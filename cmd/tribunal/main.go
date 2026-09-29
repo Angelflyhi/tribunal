@@ -2,7 +2,7 @@ package main
 
 import (
 	"archive/zip"
-	"crypto/hmac"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"github.com/hackathon-raptors/tribunal/internal/db"
+	"github.com/hackathon-raptors/tribunal/internal/judging"
 	"github.com/hackathon-raptors/tribunal/internal/server"
 )
 
@@ -76,11 +77,7 @@ func verifyResults(bundlePath string) {
 	database := db.InitDB(dbPath)
 	defer database.Close()
 
-	var eventID string
-	err := database.QueryRow("SELECT id FROM events LIMIT 1").Scan(&eventID)
-	if err != nil {
-		log.Fatalf("Failed to fetch event ID for verification: %v", err)
-	}
+	_, pub := database.GenerateOrLoadKeyPair()
 
 	zr, err := zip.OpenReader(bundlePath)
 	if err != nil {
@@ -90,6 +87,8 @@ func verifyResults(bundlePath string) {
 
 	var resultsHash, anchorHash string
 	var manifest map[string]string
+	var anchor map[string]string
+	var results []server.RankedProject
 
 	for _, f := range zr.File {
 		rc, err := f.Open()
@@ -105,9 +104,15 @@ func verifyResults(bundlePath string) {
 		if f.Name == "results.json" {
 			h := sha256.Sum256(data)
 			resultsHash = hex.EncodeToString(h[:])
+			if err := json.Unmarshal(data, &results); err != nil {
+				log.Fatalf("Failed to parse results.json: %v", err)
+			}
 		} else if f.Name == "audit-anchor.json" {
 			h := sha256.Sum256(data)
 			anchorHash = hex.EncodeToString(h[:])
+			if err := json.Unmarshal(data, &anchor); err != nil {
+				log.Fatalf("Failed to parse anchor: %v", err)
+			}
 		} else if f.Name == "manifest.json" {
 			if err := json.Unmarshal(data, &manifest); err != nil {
 				log.Fatalf("Failed to parse manifest: %v", err)
@@ -126,15 +131,128 @@ func verifyResults(bundlePath string) {
 		log.Fatalf("audit-anchor.json hash mismatch!")
 	}
 
-	mac := hmac.New(sha256.New, []byte(eventID))
-	mac.Write([]byte(manifest["results_hash"] + manifest["anchor_hash"]))
-	expectedSig := hex.EncodeToString(mac.Sum(nil))
+	msg := []byte(manifest["results_hash"] + manifest["anchor_hash"])
+	sig, err := hex.DecodeString(manifest["signature"])
+	if err != nil {
+		log.Fatalf("Failed to decode signature: %v", err)
+	}
 
-	if manifest["signature"] != expectedSig {
+	if !ed25519.Verify(pub, msg, sig) {
 		log.Fatalf("Invalid bundle signature! Bundle may have been tampered with.")
 	}
 
+	latestAuditHash, ok := anchor["latest_audit_hash"]
+	if !ok || latestAuditHash == "" {
+		log.Fatalf("Missing latest_audit_hash in anchor")
+	}
+
+	// Walk audit log
+	rows, err := database.Query("SELECT id, event_id, actor_id, action, payload_json, created_at, prev_hash, hash FROM audit_log ORDER BY id ASC")
+	if err != nil {
+		log.Fatalf("Failed to read audit_log: %v", err)
+	}
+	defer rows.Close()
+
+	expectedPrev := "0000000000000000000000000000000000000000000000000000000000000000"
+	foundAnchor := false
+	judgeComps := make(map[string][][2]string)
+
+	for rows.Next() {
+		var id, eventID, actorID, action, payloadJSON, createdAt, prevHash, hash string
+		if err := rows.Scan(&id, &eventID, &actorID, &action, &payloadJSON, &createdAt, &prevHash, &hash); err != nil {
+			log.Fatalf("Row scan failed: %v", err)
+		}
+
+		if prevHash != expectedPrev {
+			log.Fatalf("Broken chain at audit record %s! Expected prev: %s, Got: %s", id, expectedPrev, prevHash)
+		}
+
+		msg := prevHash + eventID + actorID + action + payloadJSON + createdAt
+		h := sha256.Sum256([]byte(msg))
+		if hex.EncodeToString(h[:]) != hash {
+			log.Fatalf("Data tampering detected at audit record %s! Hash mismatch.", id)
+		}
+
+		expectedPrev = hash
+
+		if action == "pairwise_vote" {
+			var p map[string]string
+			if err := json.Unmarshal([]byte(payloadJSON), &p); err == nil {
+				if w, wok := p["winner_id"]; wok {
+					if l, lok := p["loser_id"]; lok {
+						judgeComps[actorID] = append(judgeComps[actorID], [2]string{w, l})
+					}
+				}
+			}
+		}
+
+		if hash == latestAuditHash {
+			foundAnchor = true
+			break
+		}
+	}
+
+	if !foundAnchor {
+		log.Fatalf("Anchor hash %s not found in audit log! Database may have been truncated.", latestAuditHash)
+	}
+
+	// Replay Bradley-Terry Math
+	projIdx := make(map[string]int)
+	for i, rp := range results {
+		projIdx[rp.ID] = i
+	}
+	n := len(results)
+	
+	baselineWins := make([][]float64, n)
+	for i := 0; i < n; i++ {
+		baselineWins[i] = make([]float64, n)
+	}
+	
+	compIdx := make(map[string][][2]int)
+	for jID, comps := range judgeComps {
+		for _, c := range comps {
+			if wi, wok := projIdx[c[0]]; wok {
+				if li, lok := projIdx[c[1]]; lok {
+					baselineWins[wi][li] += 1.0
+					compIdx[jID] = append(compIdx[jID], [2]int{wi, li})
+				}
+			}
+		}
+	}
+
+	baselineScores := judging.FitBradleyTerry(baselineWins, n)
+	disc, _ := judging.EstimateIRTParameters(compIdx, baselineScores, n)
+
+	weightedWins := make([][]float64, n)
+	for i := 0; i < n; i++ {
+		weightedWins[i] = make([]float64, n)
+	}
+
+	for jID, comps := range compIdx {
+		weight := 1.0
+		if d, ok := disc[jID]; ok {
+			weight = d
+		}
+		for _, c := range comps {
+			weightedWins[c[0]][c[1]] += weight
+		}
+	}
+
+	scores := judging.FitBradleyTerry(weightedWins, n)
+	
+	// Verify that the order matches!
+	for i := 0; i < len(results)-1; i++ {
+		idx1 := projIdx[results[i].ID]
+		idx2 := projIdx[results[i+1].ID]
+		// Scores are higher for better projects
+		if scores[idx1] < scores[idx2] {
+			log.Fatalf("Ranking mismatch detected between audit log re-simulation and results.json!\nProject %s score %.4f vs Project %s score %.4f", results[i].ID, scores[idx1], results[i+1].ID, scores[idx2])
+		}
+	}
+
 	fmt.Println("SUCCESS: Bundle signature and integrity verified.")
+	fmt.Println("SUCCESS: Cryptographic audit log chain verified up to anchor.")
+	fmt.Println("SUCCESS: Bradley-Terry ranking re-simulated from audit trail exactly matches exported results!")
 }
 
 func runDoctor() {

@@ -78,4 +78,37 @@
 </div>
 {{end}}
 
+{{if .JudgeMetrics}}
+<div class="card" style="margin-top: var(--space-6);">
+    <h3>IRT Judge Calibration</h3>
+    <p style="color: var(--text-muted); margin-bottom: var(--space-4);">Severity and Discrimination estimated via Item Response Theory (IRT).</p>
+    <div style="overflow-x: auto;">
+        <table class="leaderboard-table" style="font-size: 0.9em;">
+            <thead>
+                <tr>
+                    <th>Judge ID</th>
+                    <th>Discrimination (Weight)</th>
+                    <th>Anomaly Flag</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .JudgeMetrics}}
+                <tr>
+                    <td><code style="font-family: var(--font-mono);">{{.JudgeID}}</code></td>
+                    <td style="font-family: var(--font-mono);">{{printf "%.4f" .Discrimination}}</td>
+                    <td>
+                        {{if .AnomalyFlag}}
+                        <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444;">{{.AnomalyFlag}}</span>
+                        {{else}}
+                        <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid #10b981;">Normal</span>
+                        {{end}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}
+
 {{end}}
