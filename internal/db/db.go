@@ -78,8 +78,16 @@ func createSchema(db *sql.DB) {
 		team_id TEXT NOT NULL,
 		track_id TEXT NOT NULL,
 		title TEXT NOT NULL,
+		tagline TEXT,
 		summary TEXT,
+		long_description TEXT,
+		thumbnail TEXT,
+		image_gallery TEXT,
+		demo_url TEXT,
 		repo_url TEXT,
+		live_link TEXT,
+		tech_tags TEXT,
+		status TEXT DEFAULT 'draft',
 		submitted_at DATETIME NOT NULL
 	);
 
@@ -201,6 +209,16 @@ func createSchema(db *sql.DB) {
 	// Migrations (ignore errors if columns already exist)
 	db.Exec("ALTER TABLE events ADD COLUMN phase TEXT DEFAULT 'DRAFT'")
 	db.Exec("ALTER TABLE scores ADD COLUMN rubric_version_id TEXT")
+	
+	// Project rich fields
+	db.Exec("ALTER TABLE projects ADD COLUMN tagline TEXT")
+	db.Exec("ALTER TABLE projects ADD COLUMN long_description TEXT")
+	db.Exec("ALTER TABLE projects ADD COLUMN thumbnail TEXT")
+	db.Exec("ALTER TABLE projects ADD COLUMN image_gallery TEXT")
+	db.Exec("ALTER TABLE projects ADD COLUMN demo_url TEXT")
+	db.Exec("ALTER TABLE projects ADD COLUMN live_link TEXT")
+	db.Exec("ALTER TABLE projects ADD COLUMN tech_tags TEXT")
+	db.Exec("ALTER TABLE projects ADD COLUMN status TEXT DEFAULT 'draft'")
 }
 
 // LogAudit appends a new cryptographically chained audit record.
@@ -213,7 +231,7 @@ func (d *DB) LogAudit(eventID, actorID, action, subjectType, subjectID string, p
 
 	// Fetch previous hash
 	var prevHash string
-	err = d.QueryRow("SELECT hash FROM audit_log WHERE event_id = ? ORDER BY id DESC LIMIT 1", eventID).Scan(&prevHash)
+	err = d.QueryRow("SELECT hash FROM audit_log WHERE event_id = ? ORDER BY rowid DESC LIMIT 1", eventID).Scan(&prevHash)
 	if err == sql.ErrNoRows {
 		prevHash = "0000000000000000000000000000000000000000000000000000000000000000"
 	} else if err != nil {

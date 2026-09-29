@@ -1,28 +1,86 @@
 {{define "content"}}
-<div class="card" style="max-width: 600px; margin: 2rem auto;">
+<div class="card" style="max-width: 800px; margin: 2rem auto;">
     <h2>Submit Project</h2>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">Fill out all the details to present your project to the judges and community.</p>
+    
     {{if .Error}}
-        <div style="color: red; margin-bottom: 1rem;">{{.Error}}</div>
+        <div style="color: #ef4444; background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem; border: 1px solid #ef4444;">{{.Error}}</div>
     {{end}}
-    <form action="/projects/new" method="POST">
-        <label for="title">Project Title</label>
-        <input type="text" id="title" name="title" required>
+    
+    <form action="/projects/new" method="POST" style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div>
+            <label for="title">Project Title *</label>
+            <input type="text" id="title" name="title" required placeholder="My Awesome Project" style="width: 100%;">
+        </div>
         
-        <label for="summary">Summary</label>
-        <textarea id="summary" name="summary" rows="4" required></textarea>
+        <div>
+            <label for="tagline">Tagline</label>
+            <input type="text" id="tagline" name="tagline" placeholder="A catchy one-liner describing your project" style="width: 100%;">
+        </div>
         
-        <label for="repo_url">Repository URL</label>
-        <input type="url" id="repo_url" name="repo_url" required>
+        <div>
+            <label for="summary">Short Summary *</label>
+            <textarea id="summary" name="summary" rows="3" required placeholder="A brief overview (max 300 characters)" style="width: 100%;"></textarea>
+        </div>
         
-        <label for="track_id">Track</label>
-        <select id="track_id" name="track_id" required>
-            <option value="" disabled selected>Select a track</option>
-            {{range .Tracks}}
-            <option value="{{.ID}}">{{.Name}}</option>
-            {{end}}
-        </select>
+        <div>
+            <label for="long_description">Long Description</label>
+            <textarea id="long_description" name="long_description" rows="8" placeholder="Detailed description of what you built, how it works, and why it matters. Markdown supported." style="width: 100%; font-family: var(--font-mono); font-size: 0.9rem;"></textarea>
+        </div>
         
-        <button type="submit" style="width: 100%;">Submit Draft</button>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div>
+                <label for="track_id">Track *</label>
+                <select id="track_id" name="track_id" required style="width: 100%;">
+                    <option value="" disabled selected>Select a track</option>
+                    {{range .Tracks}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div>
+                <label for="tech_tags">Technology Tags</label>
+                <input type="text" id="tech_tags" name="tech_tags" placeholder="React, Go, SQLite, AI" style="width: 100%;">
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div>
+                <label for="thumbnail">Thumbnail Image URL</label>
+                <input type="url" id="thumbnail" name="thumbnail" placeholder="https://example.com/image.png" style="width: 100%;">
+            </div>
+            <div>
+                <label for="image_gallery">Image Gallery URLs</label>
+                <input type="text" id="image_gallery" name="image_gallery" placeholder="Comma-separated image URLs" style="width: 100%;">
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem;">
+            <div>
+                <label for="repo_url">Repository URL *</label>
+                <input type="url" id="repo_url" name="repo_url" required placeholder="https://github.com/..." style="width: 100%;">
+            </div>
+            <div>
+                <label for="demo_url">Demo Video URL</label>
+                <input type="url" id="demo_url" name="demo_url" placeholder="https://youtube.com/..." style="width: 100%;">
+            </div>
+            <div>
+                <label for="live_link">Live Project Link</label>
+                <input type="url" id="live_link" name="live_link" placeholder="https://myapp.com" style="width: 100%;">
+            </div>
+        </div>
+        
+        <div>
+            <label for="status">Submission Status</label>
+            <select id="status" name="status" style="width: 100%;">
+                <option value="draft" selected>Draft (Not visible to judges yet)</option>
+                <option value="submitted">Final Submission (Ready for judging)</option>
+            </select>
+        </div>
+        
+        <div style="margin-top: 1rem;">
+            <button type="submit" class="btn-primary" style="width: 100%; padding: 1rem; font-size: 1.1rem;">Submit Project</button>
+        </div>
     </form>
 </div>
 {{end}}

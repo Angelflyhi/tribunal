@@ -89,7 +89,7 @@ func TestAuditLogChain(t *testing.T) {
 		t.Fatalf("LogAudit 2 failed: %v", err)
 	}
 	
-	rows, err := database.Query("SELECT id, prev_hash, hash FROM audit_log ORDER BY id ASC")
+	rows, err := database.Query("SELECT id, prev_hash, hash FROM audit_log ORDER BY rowid ASC")
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}

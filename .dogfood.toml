@@ -2,8 +2,8 @@
 base_url = "http://localhost:8080"
 
 [tiers]
-claimed = ["T1", "T2"]
-pitch = "Tribunal: a statistically rigorous hackathon judging platform with Z-score normalization and Bradley-Terry pairwise comparison. Single Go binary, CGO-free SQLite, zero external dependencies, fully offline."
+claimed = ["T1", "T2", "T3", "T4"]
+pitch = "Tribunal: the hackathon judging platform that can prove its winner is defensible. Single Go binary. CGO-free WAL SQLite. Zero external dependencies. Offline. Bradley-Terry with bootstrap CI. IRT judge calibration. Leave-one-out sensitivity. Ed25519-signed cryptographic verdict bundles. Offline verification CLI. Immutable SHA-256-chained audit ledger. Hash-linked records from first registration to final export."
 
 [auth]
 organizer   = "Cookie: session=org_7f2a"
@@ -12,8 +12,36 @@ judge_b     = "Cookie: session=jdg_b_44de"
 participant = "Cookie: session=prt_2e88"
 
 [routes]
-gallery      = "/projects"
-submit       = "/projects/new"
-judge_scores = "/api/judge/scores"
-peer_scores  = "/api/judge/scores?judge=jdg_01"
-csv_export   = "/api/export.csv"
+gallery         = "/projects"
+submit          = "/projects/new"
+judge_scores    = "/api/judge/scores"
+peer_scores     = "/api/judge/scores?judge=jdg_01"
+csv_export      = "/api/export.csv"
+bundle_export   = "/api/export/bundle"
+leaderboard     = "/organizer/leaderboard"
+pairwise        = "/judge/pairwise"
+assignments     = "/api/assignments"
+audit_log       = "/api/audit"
+webhooks        = "/api/webhooks"
+certificates    = "/api/certificates"
+embed_gallery   = "/embed/gallery"
+lossless_export = "/api/export/lossless"
+lossless_import = "/api/import/lossless"
+
+[bonuses]
+normalization_proof     = true
+pairwise_mode           = true
+community_voting        = true
+uncertainty_analysis    = true
+sensitivity_analysis    = true
+cryptographic_audit     = true
+signed_result_bundles   = true
+offline_verification    = true
+judge_irt_calibration   = true
+anti_abuse              = true
+webhooks_hmac           = true
+certificates            = true
+embeddable_gallery      = true
+bulk_import_export      = true
+openapi                 = true
+threat_model            = true

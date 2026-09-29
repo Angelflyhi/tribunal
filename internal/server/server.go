@@ -230,12 +230,20 @@ func (s *Server) Router() *http.ServeMux {
 }
 
 type ProjectView struct {
-	ID        string
-	Title     string
-	Summary   string
-	TrackName string
-	TrackID   string
-	RepoURL   string
+	ID              string
+	Title           string
+	Tagline         string
+	Summary         string
+	LongDescription string
+	Thumbnail       string
+	ImageGallery    string
+	DemoURL         string
+	RepoURL         string
+	LiveLink        string
+	TechTags        string
+	Status          string
+	TrackName       string
+	TrackID         string
 }
 
 type Track struct {
@@ -283,12 +291,30 @@ func (s *Server) handleGallery(w http.ResponseWriter, r *http.Request) {
 		user = u
 	}
 
-	rows, err := s.db.Query(`
-		SELECT p.id, p.title, p.summary, t.name 
+	q := r.URL.Query().Get("q")
+	trackFilter := r.URL.Query().Get("track")
+	
+	query := `
+		SELECT p.id, p.title, p.tagline, p.summary, p.thumbnail, p.tech_tags, p.repo_url, p.demo_url, t.name 
 		FROM projects p
 		JOIN tracks t ON p.track_id = t.id
-		ORDER BY RANDOM()
-	`)
+		WHERE p.status != 'hidden'
+	`
+	var args []interface{}
+	
+	if q != "" {
+		query += " AND (p.title LIKE ? OR p.summary LIKE ? OR p.tech_tags LIKE ?)"
+		likeQ := "%" + q + "%"
+		args = append(args, likeQ, likeQ, likeQ)
+	}
+	if trackFilter != "" {
+		query += " AND t.id = ?"
+		args = append(args, trackFilter)
+	}
+	
+	query += " ORDER BY RANDOM()"
+	
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		http.Error(w, "DB Error", http.StatusInternalServerError)
 		return
@@ -298,14 +324,30 @@ func (s *Server) handleGallery(w http.ResponseWriter, r *http.Request) {
 	var projects []ProjectView
 	for rows.Next() {
 		var p ProjectView
-		if err := rows.Scan(&p.ID, &p.Title, &p.Summary, &p.TrackName); err == nil {
+		var tagline, thumbnail, techTags, repoURL, demoURL sql.NullString
+		if err := rows.Scan(&p.ID, &p.Title, &tagline, &p.Summary, &thumbnail, &techTags, &repoURL, &demoURL, &p.TrackName); err == nil {
+			p.Tagline = tagline.String
+			p.Thumbnail = thumbnail.String
+			p.TechTags = techTags.String
+			p.RepoURL = repoURL.String
+			p.DemoURL = demoURL.String
 			projects = append(projects, p)
 		}
+	}
+
+	rowsTracks, _ := s.db.Query("SELECT id, name FROM tracks")
+	var tracks []Track
+	defer rowsTracks.Close()
+	for rowsTracks.Next() {
+		var t Track
+		rowsTracks.Scan(&t.ID, &t.Name)
+		tracks = append(tracks, t)
 	}
 
 	data := PageData{
 		User:     user,
 		Projects: projects,
+		Tracks:   tracks,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -544,15 +586,30 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	title := r.FormValue("title")
+	tagline := r.FormValue("tagline")
 	summary := r.FormValue("summary")
+	longDesc := r.FormValue("long_description")
+	thumbnail := r.FormValue("thumbnail")
+	imageGallery := r.FormValue("image_gallery")
+	demoURL := r.FormValue("demo_url")
 	repoURL := r.FormValue("repo_url")
+	liveLink := r.FormValue("live_link")
+	techTags := r.FormValue("tech_tags")
+	status := r.FormValue("status")
+	if status == "" {
+		status = "draft"
+	}
 	trackID := r.FormValue("track_id")
 
 	projectID := uuid.New().String()
 	submittedAt := time.Now().Format(time.RFC3339)
 
-	_, err = s.db.Exec("INSERT INTO projects (id, team_id, track_id, title, summary, repo_url, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		projectID, teamID, trackID, title, summary, repoURL, submittedAt)
+	_, err = s.db.Exec(`INSERT INTO projects (
+		id, team_id, track_id, title, tagline, summary, long_description, 
+		thumbnail, image_gallery, demo_url, repo_url, live_link, tech_tags, status, submitted_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		projectID, teamID, trackID, title, tagline, summary, longDesc,
+		thumbnail, imageGallery, demoURL, repoURL, liveLink, techTags, status, submittedAt)
 
 	if err != nil {
 		http.Error(w, "Failed to submit project", http.StatusInternalServerError)
@@ -714,7 +771,7 @@ func (s *Server) handleExportBundle(w http.ResponseWriter, r *http.Request) {
 
 	// Build audit-anchor.json
 	var latestHash string
-	err = s.db.QueryRow("SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1").Scan(&latestHash)
+	err = s.db.QueryRow("SELECT hash FROM audit_log ORDER BY rowid DESC LIMIT 1").Scan(&latestHash)
 	if err != nil {
 		latestHash = "0000000000000000000000000000000000000000000000000000000000000000"
 	}
@@ -771,11 +828,27 @@ func (s *Server) handleEditProjectGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var p ProjectView
-	err = s.db.QueryRow("SELECT id, title, summary, track_id, repo_url FROM projects WHERE team_id = ?", teamID).Scan(&p.ID, &p.Title, &p.Summary, &p.TrackID, &p.RepoURL)
+	var tagline, longDesc, thumbnail, imageGallery, demoURL, liveLink, techTags, status sql.NullString
+	err = s.db.QueryRow(`
+		SELECT id, title, tagline, summary, long_description, thumbnail, image_gallery, demo_url, repo_url, live_link, tech_tags, status, track_id 
+		FROM projects WHERE team_id = ?
+	`, teamID).Scan(
+		&p.ID, &p.Title, &tagline, &p.Summary, &longDesc, &thumbnail, &imageGallery, &demoURL, &p.RepoURL, &liveLink, &techTags, &status, &p.TrackID,
+	)
+	
 	if err != nil {
 		http.Redirect(w, r, "/projects/new", http.StatusSeeOther)
 		return
 	}
+	
+	p.Tagline = tagline.String
+	p.LongDescription = longDesc.String
+	p.Thumbnail = thumbnail.String
+	p.ImageGallery = imageGallery.String
+	p.DemoURL = demoURL.String
+	p.LiveLink = liveLink.String
+	p.TechTags = techTags.String
+	p.Status = status.String
 
 	rows, _ := s.db.Query("SELECT id, name FROM tracks")
 	var tracks []Track
@@ -817,12 +890,27 @@ func (s *Server) handleEditProjectPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	title := r.FormValue("title")
+	tagline := r.FormValue("tagline")
 	summary := r.FormValue("summary")
+	longDesc := r.FormValue("long_description")
+	thumbnail := r.FormValue("thumbnail")
+	imageGallery := r.FormValue("image_gallery")
+	demoURL := r.FormValue("demo_url")
 	repoURL := r.FormValue("repo_url")
+	liveLink := r.FormValue("live_link")
+	techTags := r.FormValue("tech_tags")
+	status := r.FormValue("status")
+	if status == "" {
+		status = "draft"
+	}
 	trackID := r.FormValue("track_id")
 
-	_, err = s.db.Exec("UPDATE projects SET title = ?, summary = ?, repo_url = ?, track_id = ? WHERE team_id = ?",
-		title, summary, repoURL, trackID, teamID)
+	_, err = s.db.Exec(`UPDATE projects SET 
+		title = ?, tagline = ?, summary = ?, long_description = ?, 
+		thumbnail = ?, image_gallery = ?, demo_url = ?, repo_url = ?, 
+		live_link = ?, tech_tags = ?, status = ?, track_id = ? 
+		WHERE team_id = ?`,
+		title, tagline, summary, longDesc, thumbnail, imageGallery, demoURL, repoURL, liveLink, techTags, status, trackID, teamID)
 
 	if err != nil {
 		http.Error(w, "Failed to edit project", http.StatusInternalServerError)

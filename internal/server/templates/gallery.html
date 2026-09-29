@@ -8,12 +8,40 @@
         </div>
     {{end}}
 </div>
+
+<div class="card mb-8" style="background: var(--bg-surface); padding: var(--space-4);">
+    <form action="/projects" method="GET" style="display: flex; gap: var(--space-4); align-items: center; flex-wrap: wrap;">
+        <div style="flex-grow: 1; min-width: 250px;">
+            <input type="text" name="q" placeholder="Search projects by title, summary, or tech stack..." style="width: 100%;" value="">
+        </div>
+        <div>
+            <select name="track">
+                <option value="">All Tracks</option>
+                {{range .Tracks}}
+                <option value="{{.ID}}">{{.Name}}</option>
+                {{end}}
+            </select>
+        </div>
+        <button type="submit" class="btn-primary">Search</button>
+    </form>
+</div>
+
 <div class="projects-grid">
     {{range .Projects}}
     <div class="card project-card">
+        {{if .Thumbnail}}
+        <img src="{{.Thumbnail}}" alt="Thumbnail" style="width: 100%; height: 200px; object-fit: cover; border-radius: var(--radius-md) var(--radius-md) 0 0; margin-bottom: var(--space-4);">
+        {{end}}
         <h3>{{.Title}}</h3>
+        {{if .Tagline}}<p style="font-weight: bold; color: var(--accent); margin-bottom: var(--space-2);">{{.Tagline}}</p>{{end}}
         <div class="badge mb-4">{{.TrackName}}</div>
+        {{if .TechTags}}<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: var(--space-2);">{{.TechTags}}</div>{{end}}
         <p>{{.Summary}}</p>
+        <div style="display: flex; gap: var(--space-2); margin-top: var(--space-4);">
+            {{if .DemoURL}}<a href="{{.DemoURL}}" target="_blank" class="btn btn-primary" style="flex: 1; text-align: center; font-size: 0.9rem; padding: 0.5rem;">▶️ Demo</a>{{end}}
+            {{if .LiveLink}}<a href="{{.LiveLink}}" target="_blank" class="btn btn-secondary" style="flex: 1; text-align: center; font-size: 0.9rem; padding: 0.5rem;">🌐 Live</a>{{end}}
+            {{if .RepoURL}}<a href="{{.RepoURL}}" target="_blank" class="btn btn-secondary" style="flex: 1; text-align: center; font-size: 0.9rem; padding: 0.5rem;">📦 Code</a>{{end}}
+        </div>
     </div>
     {{else}}
     <div class="empty-state card" style="grid-column: 1 / -1; text-align: center; padding: 6rem 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(180deg, var(--bg-surface) 0%, rgba(31,36,38,0.2) 100%); border: 1px dashed var(--border-strong); position: relative; overflow: hidden;">
@@ -26,7 +54,7 @@
             </svg>
         </div>
         <h2 style="font-size: 2.5rem; margin-bottom: 1rem; color: var(--text-primary); letter-spacing: -0.03em; z-index: 1;">The Arena is Empty</h2>
-        <p style="color: var(--text-secondary); max-width: 450px; margin: 0 auto 2.5rem auto; font-size: 1.15rem; line-height: 1.6; z-index: 1;">No projects have been submitted yet. Be the first to stake your claim and set the standard for Dogfood 2026.</p>
+        <p style="color: var(--text-secondary); max-width: 450px; margin: 0 auto 2.5rem auto; font-size: 1.15rem; line-height: 1.6; z-index: 1;">No projects match your search, or none have been submitted yet.</p>
         {{if and .User (eq .User.Role "participant")}}
             <a href="/projects/new" class="btn btn-primary" style="padding: 1rem 2.5rem; font-size: 1.1rem; box-shadow: 0 0 30px var(--accent-glow); z-index: 1; transition: all 0.3s ease;">Enter the Arena</a>
         {{else if not .User}}
