@@ -403,3 +403,156 @@ func EstimateIRTParameters(judgeComparisons map[string][][2]int, consensusScores
 
 	return discriminations, severities
 }
+
+// RecommendPairwiseComparisons uses current Bradley-Terry uncertainty (CIs) to select the most
+// informative pairs for a judge to compare, prioritizing projects with overlapping confidence intervals.
+func RecommendPairwiseComparisons(wins [][]float64, n int, budget int) [][2]int {
+	if n < 2 {
+		return nil
+	}
+
+	// 1. Get current ranks and uncertainty
+	intervals := BootstrapConfidenceIntervals(wins, n, 50) // fast 50 iter for realtime
+	if len(intervals) == 0 {
+		return nil
+	}
+
+	// 2. Score potential pairs
+	type PairScore struct {
+		P1    int
+		P2    int
+		Score float64
+	}
+	var candidates []PairScore
+
+	for i := 0; i < n; i++ {
+		for j := i + 1; j < n; j++ {
+			// Information value is highest when we don't know who is better
+			// i.e., their confidence intervals overlap heavily
+			overlap := 0
+			start := intervals[i].Lower
+			if intervals[j].Lower > start {
+				start = intervals[j].Lower
+			}
+			end := intervals[i].Upper
+			if intervals[j].Upper < end {
+				end = intervals[j].Upper
+			}
+			if end >= start {
+				overlap = end - start + 1
+			}
+
+			// existing comparisons reduce the value of asking again
+			existingComps := wins[i][j] + wins[j][i]
+			
+			// Priority weight: we care more about the top 10 than the bottom 10.
+			rankWeight := 1.0 / (float64(intervals[i].Lower+intervals[j].Lower) + 1.0)
+
+			score := float64(overlap) * rankWeight / (1.0 + existingComps)
+			if score > 0 || existingComps == 0 {
+				candidates = append(candidates, PairScore{P1: i, P2: j, Score: score})
+			}
+		}
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Score > candidates[j].Score
+	})
+
+	var recommendations [][2]int
+	for i := 0; i < len(candidates) && i < budget; i++ {
+		recommendations = append(recommendations, [2]int{candidates[i].P1, candidates[i].P2})
+	}
+
+	return recommendations
+}
+
+// ReviewInfluence measures the impact of a single pairwise comparison on the ranking.
+type ReviewInfluence struct {
+	WinnerID    int
+	LoserID     int
+	MaxRankDiff int
+}
+
+// LeaveOneOutReviewInfluence estimates the robustness of the ranking by removing single reviews.
+func LeaveOneOutReviewInfluence(wins [][]float64, n int) []ReviewInfluence {
+	if n == 0 {
+		return nil
+	}
+
+	baseQualities := FitBradleyTerry(wins, n)
+	baseRanks := computeRanks(baseQualities)
+
+	var influences []ReviewInfluence
+
+	// For efficiency on large graphs, we only test removing reviews that actually occurred
+	for i := 0; i < n; i++ {
+		for j := 0; j < n; j++ {
+			if wins[i][j] > 0 {
+				// Clone and remove this review
+				looWins := make([][]float64, n)
+				for k := 0; k < n; k++ {
+					looWins[k] = make([]float64, n)
+					copy(looWins[k], wins[k])
+				}
+				looWins[i][j]--
+
+				looQualities := FitBradleyTerry(looWins, n)
+				looRanks := computeRanks(looQualities)
+
+				maxDiff := 0
+				for k := 0; k < n; k++ {
+					diff := baseRanks[k] - looRanks[k]
+					if diff < 0 {
+						diff = -diff
+					}
+					if diff > maxDiff {
+						maxDiff = diff
+					}
+				}
+
+				if maxDiff > 0 { // Only care if it actually changes something
+					influences = append(influences, ReviewInfluence{
+						WinnerID:    i,
+						LoserID:     j,
+						MaxRankDiff: maxDiff,
+					})
+				}
+			}
+		}
+	}
+
+	sort.Slice(influences, func(i, j int) bool {
+		return influences[i].MaxRankDiff > influences[j].MaxRankDiff
+	})
+
+	return influences
+}
+
+// CounterfactualVerdict checks what minimum additional evidence (pairwise) would be needed
+// to change the #1 winner. Returns the recommended pairs to test this.
+func CounterfactualVerdict(wins [][]float64, n int) [][2]int {
+	if n < 2 {
+		return nil
+	}
+	
+	baseQualities := FitBradleyTerry(wins, n)
+	baseRanks := computeRanks(baseQualities)
+	
+	winner := -1
+	runnerUp := -1
+	for i, r := range baseRanks {
+		if r == 1 {
+			winner = i
+		} else if r == 2 {
+			runnerUp = i
+		}
+	}
+	
+	if winner == -1 || runnerUp == -1 {
+		return nil
+	}
+	
+	// The most direct counterfactual is the runner-up beating the winner.
+	return [][2]int{{runnerUp, winner}}
+}

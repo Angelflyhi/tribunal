@@ -31,13 +31,13 @@ func TestRBACMatrix(t *testing.T) {
 	orgEmail := "org@test.com"
 	partEmail := "part@test.com"
 	
-	database.Exec("INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)", uuid.New().String(), orgEmail, "hash", "organizer")
-	database.Exec("INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)", uuid.New().String(), partEmail, "hash", "participant")
+	database.Exec("INSERT INTO users (id, email, password_hash, role, ref_id) VALUES (?, ?, ?, ?, ?)", uuid.New().String(), orgEmail, "hash", "organizer", orgEmail)
+	database.Exec("INSERT INTO users (id, email, password_hash, role, ref_id) VALUES (?, ?, ?, ?, ?)", uuid.New().String(), partEmail, "hash", "participant", partEmail)
 	
 	orgToken := "org-token"
 	partToken := "part-token"
-	database.Exec("INSERT INTO sessions (token, user_id, expires_at) SELECT ?, id, ? FROM users WHERE email = ?", orgToken, time.Now().Add(1*time.Hour).Format(time.RFC3339), orgEmail)
-	database.Exec("INSERT INTO sessions (token, user_id, expires_at) SELECT ?, id, ? FROM users WHERE email = ?", partToken, time.Now().Add(1*time.Hour).Format(time.RFC3339), partEmail)
+	database.Exec("INSERT INTO sessions (token, user_id, expires_at) SELECT ?, id, datetime('now', '+1 hour') FROM users WHERE email = ?", orgToken, orgEmail)
+	database.Exec("INSERT INTO sessions (token, user_id, expires_at) SELECT ?, id, datetime('now', '+1 hour') FROM users WHERE email = ?", partToken, partEmail)
 
 	tests := []struct {
 		name       string
@@ -49,7 +49,7 @@ func TestRBACMatrix(t *testing.T) {
 		// Participant access
 		{"Part -> Dashboard", "GET", "/dashboard", partToken, http.StatusOK},
 		{"Part -> Export CSV (Deny)", "GET", "/api/export.csv", partToken, http.StatusForbidden},
-		{"Part -> Assignments (Deny)", "GET", "/api/assignments", partToken, http.StatusForbidden},
+		{"Part -> Assignments (Deny)", "POST", "/api/assignments", partToken, http.StatusForbidden},
 		
 		// Organizer access
 		{"Org -> Export CSV", "GET", "/api/export.csv", orgToken, http.StatusOK},

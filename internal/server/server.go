@@ -518,8 +518,15 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var phase string
+	err := s.db.QueryRow("SELECT phase FROM events LIMIT 1").Scan(&phase)
+	if err == nil && phase != "SUBMISSION" {
+		http.Error(w, "Submissions are closed or not yet open in this event phase", http.StatusForbidden)
+		return
+	}
+
 	var closeDate string
-	err := s.db.QueryRow("SELECT submissions_close FROM events LIMIT 1").Scan(&closeDate)
+	err = s.db.QueryRow("SELECT submissions_close FROM events LIMIT 1").Scan(&closeDate)
 	
 	if err == nil && closeDate != "" {
 		closeTime, parseErr := time.Parse(time.RFC3339, closeDate)
@@ -1175,6 +1182,19 @@ func (s *Server) handlePublicVote(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		identity = p.Email
+	}
+
+	// Abuse Signal tracking: Rate Limit by IP directly here
+	rateMutex.Lock()
+	abuseKey := "vote:" + ip
+	rateLimiter[abuseKey]++
+	count := rateLimiter[abuseKey]
+	rateMutex.Unlock()
+
+	if count > 10 { // Max 10 votes per minute per IP = Abuse Flag
+		s.logAuditHelper(identity, "vote_abuse_flagged", "project", projectID, map[string]string{"ip": ip, "reason": "rate_limit_exceeded"})
+		http.Error(w, "Voting velocity too high. Abuse flagged.", http.StatusTooManyRequests)
+		return
 	}
 
 	_, err = s.db.Exec("INSERT INTO public_votes (project_id, identity, ip_address) VALUES (?, ?, ?)", projectID, identity, ip)

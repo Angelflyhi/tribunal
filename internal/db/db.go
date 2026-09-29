@@ -39,6 +39,7 @@ func createSchema(db *sql.DB) {
 	CREATE TABLE IF NOT EXISTS events (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,
+		phase TEXT DEFAULT 'DRAFT',
 		submissions_close DATETIME NOT NULL,
 		voting_mode TEXT DEFAULT 'authenticated',
 		voting_close DATETIME
@@ -82,9 +83,19 @@ func createSchema(db *sql.DB) {
 		submitted_at DATETIME NOT NULL
 	);
 
+	CREATE TABLE IF NOT EXISTS rubric_versions (
+		id TEXT PRIMARY KEY,
+		event_id TEXT NOT NULL,
+		version_number INTEGER NOT NULL,
+		criteria_json TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		published BOOLEAN DEFAULT 0
+	);
+
 	CREATE TABLE IF NOT EXISTS scores (
 		judge_id TEXT NOT NULL,
 		project_id TEXT NOT NULL,
+		rubric_version_id TEXT,
 		criteria JSON NOT NULL,
 		comment TEXT,
 		PRIMARY KEY (judge_id, project_id)
@@ -171,12 +182,25 @@ func createSchema(db *sql.DB) {
 		anomaly_flag TEXT,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS certificates (
+		id TEXT PRIMARY KEY,
+		subject_id TEXT NOT NULL,
+		subject_type TEXT NOT NULL,
+		event_id TEXT NOT NULL,
+		issued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		signature_hex TEXT NOT NULL
+	);
 	`
 
 	_, err := db.Exec(schema)
 	if err != nil {
 		log.Fatalf("Failed to create schema: %v", err)
 	}
+
+	// Migrations (ignore errors if columns already exist)
+	db.Exec("ALTER TABLE events ADD COLUMN phase TEXT DEFAULT 'DRAFT'")
+	db.Exec("ALTER TABLE scores ADD COLUMN rubric_version_id TEXT")
 }
 
 // LogAudit appends a new cryptographically chained audit record.

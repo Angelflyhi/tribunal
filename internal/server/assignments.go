@@ -194,7 +194,7 @@ func (s *Server) GenerateAssignments(eventID string, targetPerProject int, seed 
 }
 
 func (s *Server) handleAssignmentsPost(w http.ResponseWriter, r *http.Request) {
-	user := r.Context().Value(userContextKey).(*User)
+	user, _ := r.Context().Value(userContextKey).(*User)
 	if user == nil || user.Role != "organizer" {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
