@@ -22,8 +22,10 @@ The database uses robust relational constraints to maintain integrity across the
 
 *   `judges`: The judge directory.
 *   `judge_tracks`: A cross-reference table binding judges to specific tracks, preventing a judge from evaluating outside their domain.
+*   `judge_assignments`: The algorithmic assignment tracker. Enforces load balancing, conflict resolution, and ensures sufficient coverage per project. Tracks assignment state (`assigned`, `started`, `completed`).
 *   `scores`: The standard rubric scoring. Composite primary key on `(judge_id, project_id)` enforces idempotency (a judge can only score a project once). `criteria` is a JSON blob for flexible rubric structures.
 *   `pairwise_comparisons`: The immutable ledger for the Bradley-Terry ranking engine. Records `(judge_id, winner_id, loser_id, created_at)`. Append-only.
+*   `audit_log`: The cryptographic hash-chain tracking every significant state mutation (score submissions, edits, assignments) to ensure tamper-evidence and independent verifiability.
 
 ## Concurrency and Write-Ahead Logging (WAL)
 

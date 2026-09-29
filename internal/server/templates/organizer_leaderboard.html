@@ -28,7 +28,7 @@
                         <span class="badge">{{.TrackName}}</span>
                     </td>
                     <td style="text-align: right; font-family: var(--font-mono); font-weight: bold; color: var(--accent);">
-                        {{printf "%.1f" .Score}}
+                        {{printf "%.4f" .ScoreFloat}} <span style="font-size: 0.8em; color: var(--text-muted); font-weight: normal;">(CI: {{.CILower}}-{{.CIUpper}})</span>
                     </td>
                 </tr>
                 {{else}}
@@ -42,4 +42,40 @@
         </table>
     </div>
 </div>
+
+{{if .JudgeInfluences}}
+<div class="card" style="margin-top: var(--space-6);">
+    <h3>Defensibility Analysis (Leave-One-Out)</h3>
+    <p style="color: var(--text-muted); margin-bottom: var(--space-4);">Maximum rank displacement if a judge's comparisons were removed.</p>
+    <div style="overflow-x: auto;">
+        <table class="leaderboard-table" style="font-size: 0.9em;">
+            <thead>
+                <tr>
+                    <th>Judge ID</th>
+                    <th>Max Rank Shift</th>
+                    <th>Risk Level</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .JudgeInfluences}}
+                <tr>
+                    <td><code style="font-family: var(--font-mono);">{{.JudgeID}}</code></td>
+                    <td>{{.MaxRankDiff}} positions</td>
+                    <td>
+                        {{if gt .MaxRankDiff 3}}
+                        <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444;">High</span>
+                        {{else if gt .MaxRankDiff 1}}
+                        <span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b;">Medium</span>
+                        {{else}}
+                        <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid #10b981;">Low</span>
+                        {{end}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}
+
 {{end}}

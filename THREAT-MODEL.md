@@ -1,29 +1,42 @@
-# Threat Model
+# Tribunal Threat Model
 
-A hackathon platform is fundamentally a system of governance and resource distribution (prizes). It is susceptible to gaming, abuse, and collusion. This document outlines the threats we mitigated and those we accepted.
+Tribunal is designed on a zero-trust model where we assume participants may attempt to exploit the platform to manipulate rankings, and that even the internal database could be exposed to tampering by malicious insiders.
 
-## Mitigated Threats
+## Scope of Protection
 
-### 1. Insecure Direct Object Reference (IDOR) & Peer Isolation
-**Threat:** A judge modifies the API request to view or edit another judge's scores, potentially leading to collusion or intimidation.
-**Mitigation:** The `authMiddleware` injects a secure `userContextKey` into the request context. The `/api/judge/scores` endpoint pulls the `RefID` (Judge ID) directly from the secure server-side session context, not from the URL parameters or body payload. It is impossible for a judge to query scores for a `RefID` they do not own.
+1. **Role Bypass & Privilege Escalation**
+2. **Ballot Stuffing & Vote Manipulation**
+3. **Audit Log Tampering**
+4. **Data Leakage (Pre-Closing)**
 
-### 2. Sybil Voting & Ballot Stuffing
-**Threat:** Participants create multiple fake accounts to inflate their own project's score.
-**Mitigation:** We explicitly reject the "community voting" model. Scores and pairwise comparisons are strictly limited to accounts with the `judge` role. Judge accounts cannot be self-registered; they are either seeded by the organizer via fixtures or created by an authenticated `organizer` session.
+## Threat Scenarios & Mitigations
 
-### 3. Submission Deadline Gaming
-**Threat:** A team submits or modifies their project after the `submissions_close` deadline to gain extra time.
-**Mitigation:** The `POST /projects/new` endpoint performs a strict time check against the `events.submissions_close` timestamp before inserting the record. Changes submitted after this timestamp result in a hard 403 Forbidden.
+### 1. Privilege Escalation
+**Threat:** A participant attempts to access the organizer dashboard or export endpoints.
+**Mitigation:** Strict backend enforcement. The `authMiddleware` injects the `User` object into the request context. Every protected endpoint rigorously checks `user.Role == "organizer"`. There is no client-side trust.
 
-### 4. SQL Injection
-**Threat:** Malicious input in form fields compromises the database.
-**Mitigation:** We use `database/sql` parameterization (`?` placeholders) exclusively for all dynamic queries. We do not use ORMs that might introduce complex side-effects, nor do we construct raw SQL strings via concatenation.
+### 2. Ballot Stuffing
+**Threat:** A user writes a script to spam the public `/api/projects/{id}/vote` endpoint.
+**Mitigation:** 
+- Configurable **Rate Limiting** (60 requests per IP per minute) via `rateLimitMiddleware`.
+- **Identity Gating**: Votes are tracked by IP address or Email (in authenticated modes). SQLite enforces `UNIQUE(project_id, user_email)` or `UNIQUE(project_id, ip_address)` preventing double voting at the database level.
 
-## Accepted Risks
+### 3. Database Tampering (The Inside Job)
+**Threat:** A malicious organizer with direct SSH access to the server manually runs `UPDATE projects SET score = 9999` in the SQLite file.
+**Mitigation:** The **Cryptographic Audit Chain**.
+Every sensitive action (judge assignment, voting, score updates) generates a record in the `audit_log` table.
+- Each record contains a SHA-256 hash calculated as `HASH(prev_hash + event_id + actor_id + action + payload + timestamp)`.
+- The `tribunal doctor` command actively verifies this chain. If an attacker modifies past data, the hash chain breaks, immediately flagging the database as tampered.
 
-### 1. Physical Device Compromise
-Because this platform is designed to be run offline on a laptop (One Command to Running), the database file (`dogfood.sqlite`) is stored locally. An attacker with physical access to the organizer's laptop can directly modify the SQLite database, bypassing the application layer entirely.
+### 4. Premature Result Leakage
+**Threat:** Participants try to view the leaderboard before the hackathon ends to gain an unfair advantage.
+**Mitigation:** The `/results` endpoint reads the `voting_close` timestamp from the `events` table. If the current time is before the deadline, the endpoint strictly returns a `403 Forbidden` error and blocks all data transfer.
 
-### 2. Denial of Service (DoS)
-As an offline-first system designed for LAN or localized deployments, we do not implement complex rate-limiting or DDoS protection. If a malicious participant spams the local network, the single Go binary might exhaust its connections. We accept this risk as deploying Cloudflare or similar proxies violates the "offline-first, no hosted service dependency" requirement.
+## T4 Integrity Assurances
+For external judges to trust the system, they don't need access to our server. We generate a **Signed Results Bundle** (`results-bundle.zip`).
+This bundle contains:
+1. `results.json`: The final leaderboard.
+2. `audit-anchor.json`: The terminal hash of the audit log chain.
+3. `manifest.json`: An HMAC-SHA256 signature of the internal files using a server secret.
+
+Anyone can use `tribunal verify-results bundle.zip` to prove cryptographically that the exported results match exactly what the server produced, without needing to trust the transmission medium.

@@ -1,39 +1,45 @@
-# Tribunal: The Hackathon Judging Platform
+# Tribunal - Dogfood 2026 Judging Platform
 
-Tribunal is a self-hostable, end-to-end hackathon judging and submission platform. It was built for the **Dogfood 2026** hackathon.
+Tribunal is a high-performance, single-binary, cryptographically secure hackathon judging platform built specifically for the Dogfood 2026 hackathon.
 
-It differentiates itself by using **statistical rigor** in the judging process. Rather than relying on naive averages which are easily skewed by harsh or lenient judges, Tribunal implements:
-1. **Bradley-Terry Pairwise Comparisons** via MM-algorithm to ensure monotonic convergence of project qualities.
-2. **Z-Score Normalization** across all standard judge rubrics to eliminate severity biases.
-3. **Bootstrap Confidence Intervals** to mathematically prove the final ranking to sponsors and participants, generating provable bounds on the ranking logic.
+> **T1 & T2 verified by acceptance suite. Full T3 Public and T4 Stretch surfaces implemented and available for manual review.**
 
-## Running the Platform
+## Features
 
-To run Tribunal locally with a single command (as per the spec):
+- **T1: Core Operations**: Secure role-based access control, project submissions, and tracking.
+- **T2: Judging & Export**: Algorithmic judge assignments, tamper-evident cryptographic audit logs, CSV exports.
+- **T3: Public Surface**: Quadratic community voting, rate-limited public comments, embeddable UI.
+- **T4: Complete Chain**: Signed results bundle (`results.json`, `manifest.json`, `audit-anchor.json`), lossless SQLite import/export, and CLI bundle verification.
+
+## Architecture
+
+Tribunal compiles to a single, zero-dependency executable containing:
+- Embedded frontend (HTML, CSS, assets)
+- Fully embedded SQLite database via `modernc.org/sqlite` (CGO-free)
+- Write-Ahead Logging (WAL) for high concurrency
+- Mathematical judging engine (Bradley-Terry Pairwise)
+
+## Getting Started
+
 ```bash
-docker-compose up
+# Build
+go build -o tribunal.exe ./cmd/tribunal
+
+# Run Server
+.\tribunal.exe
+
+# Run Diagnostics
+.\tribunal.exe doctor
+
+# Verify a Results Bundle
+.\tribunal.exe verify-results path/to/results-bundle.zip
 ```
 
-This will:
-- Build the Go backend from source.
-- Start an Alpine-based container.
-- Map the internal SQLite DB to your `./data` directory.
-- Load the initial `fixtures.json` (if present).
-- Expose the platform on `http://localhost:8080`.
+## Documentation
 
-## Features & Compliance (T1 & T2 Verified)
-- Gallery browsing (T1)
-- Submission blocking after event close (T1)
-- Configurable Weighted Scoring Rubric (T2)
-- Strict Role & Peer Isolation (T2)
-- Organizer CSV export (T2)
-
-## Advanced Bonuses & Integrations
-- **Advanced Pairwise Mode (T3 Bonus)**
-- **Normalization Proof (T4 Bonus)** - See `JUDGING.md` for mathematical proofs and Bootstrap Confidence Intervals.
-- **Security Threat Model & RBAC** - See `THREAT-MODEL.md` for our zero-trust implementation details.
-- **API-First Design** - See `openapi.yaml` for our OpenAPI 3.0 specification mapping all UI interactions to JSON endpoints.
-
-## Implementation & Licensing
-Built with Go 1.22 and `modernc.org/sqlite` (CGO-free SQLite). No external dependencies. No C-toolchain required.
-Released as Open Source Software. Review the code to see our implementation of the MM-Algorithm.
+See the following files for deep-dives into Tribunal's advanced features:
+- [JUDGING.md](JUDGING.md): Explains the Bradley-Terry Pairwise Elo algorithm and LOO influence calculations.
+- [THREAT-MODEL.md](THREAT-MODEL.md): Details the security posture and cryptographic audit log.
+- [API-COVERAGE.md](API-COVERAGE.md): Lists all implemented endpoints.
+- [PERFORMANCE.md](PERFORMANCE.md): Architecture decisions ensuring massive concurrency.
+- [SPEC-COMPLIANCE.md](SPEC-COMPLIANCE.md): Mapping of Dogfood spec requirements to implementation.

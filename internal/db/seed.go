@@ -75,7 +75,7 @@ func (db *DB) LoadFixtures(filepath string) error {
 	defer tx.Rollback()
 
 	// Clear existing (optional, but good for idempotent load)
-	tables := []string{"sessions", "users", "scores", "projects", "team_members", "teams", "judge_tracks", "judges", "tracks", "events"}
+	tables := []string{"webhooks", "audit_logs", "comments", "public_votes", "pairwise_comparisons", "sessions", "users", "scores", "projects", "team_members", "teams", "judge_tracks", "judges", "tracks", "events"}
 	for _, t := range tables {
 		tx.Exec("DELETE FROM " + t)
 	}
@@ -170,7 +170,7 @@ func (db *DB) LoadFixtures(filepath string) error {
 		{"prt_2e88", "user_prt"},
 	}
 	for _, s := range sessions {
-		_, err = tx.Exec("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, datetime('now', '+1 day'))",
+		_, err = tx.Exec("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, datetime('now', '+30 days'))",
 			s.Token, s.UserID)
 		if err != nil {
 			return err

@@ -1,14 +1,13 @@
 {{define "content"}}
 <div class="hero">
-    <h1>Project Gallery</h1>
-    <p>Discover the amazing hacks built during Dogfood 2026.</p>
+    <h1>This is HACKATHON RAPTORS</h1>
+    <p>Ideate. Program. Revolutionize.</p>
     {{if and .User (eq .User.Role "participant")}}
         <div class="mt-6">
             <a href="/projects/new" class="btn btn-primary">➕ Submit Your Project</a>
         </div>
     {{end}}
 </div>
-
 <div class="projects-grid">
     {{range .Projects}}
     <div class="card project-card">
@@ -17,9 +16,22 @@
         <p>{{.Summary}}</p>
     </div>
     {{else}}
-    <div class="card" style="grid-column: 1 / -1; text-align: center; padding: var(--space-12);">
-        <h3 style="color: var(--text-muted);">No projects submitted yet</h3>
-        <p>Check back later or submit your own!</p>
+    <div class="empty-state card" style="grid-column: 1 / -1; text-align: center; padding: 6rem 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(180deg, var(--bg-surface) 0%, rgba(31,36,38,0.2) 100%); border: 1px dashed var(--border-strong); position: relative; overflow: hidden;">
+        <div style="position: absolute; width: 300px; height: 300px; background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%); top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.3; pointer-events: none;"></div>
+        <div style="margin-bottom: 2rem; z-index: 1;">
+            <svg width="120" height="120" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-dasharray="15 15" style="animation: spinSlow 20s linear infinite; transform-origin: center;" />
+                <rect x="40" y="40" width="40" height="40" fill="none" stroke="var(--accent)" stroke-width="4" transform="rotate(45 60 60)" style="animation: pulseSoft 3s ease-in-out infinite;" />
+                <circle cx="60" cy="60" r="8" fill="var(--text-muted)" style="animation: pulseSoft 3s ease-in-out infinite; animation-delay: 1.5s;" />
+            </svg>
+        </div>
+        <h2 style="font-size: 2.5rem; margin-bottom: 1rem; color: var(--text-primary); letter-spacing: -0.03em; z-index: 1;">The Arena is Empty</h2>
+        <p style="color: var(--text-secondary); max-width: 450px; margin: 0 auto 2.5rem auto; font-size: 1.15rem; line-height: 1.6; z-index: 1;">No projects have been submitted yet. Be the first to stake your claim and set the standard for Dogfood 2026.</p>
+        {{if and .User (eq .User.Role "participant")}}
+            <a href="/projects/new" class="btn btn-primary" style="padding: 1rem 2.5rem; font-size: 1.1rem; box-shadow: 0 0 30px var(--accent-glow); z-index: 1; transition: all 0.3s ease;">Enter the Arena</a>
+        {{else if not .User}}
+            <a href="/register" class="btn btn-primary" style="padding: 1rem 2.5rem; font-size: 1.1rem; box-shadow: 0 0 30px var(--accent-glow); z-index: 1; transition: all 0.3s ease;">Register to Submit</a>
+        {{end}}
     </div>
     {{end}}
 </div>

@@ -1,14 +1,20 @@
 package db
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"log"
+	"time"
+	"github.com/google/uuid"
 
 	_ "modernc.org/sqlite"
 )
 
 type DB struct {
 	*sql.DB
+	Path string
 }
 
 func InitDB(dbPath string) *DB {
@@ -25,7 +31,7 @@ func InitDB(dbPath string) *DB {
 
 	createSchema(db)
 
-	return &DB{db}
+	return &DB{DB: db, Path: dbPath}
 }
 
 func createSchema(db *sql.DB) {
@@ -33,7 +39,9 @@ func createSchema(db *sql.DB) {
 	CREATE TABLE IF NOT EXISTS events (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,
-		submissions_close DATETIME NOT NULL
+		submissions_close DATETIME NOT NULL,
+		voting_mode TEXT DEFAULT 'authenticated',
+		voting_close DATETIME
 	);
 
 	CREATE TABLE IF NOT EXISTS tracks (
@@ -103,6 +111,58 @@ func createSchema(db *sql.DB) {
 		loser_id TEXT NOT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS public_votes (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		project_id TEXT NOT NULL,
+		identity TEXT NOT NULL,
+		ip_address TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(project_id, identity)
+	);
+
+	CREATE TABLE IF NOT EXISTS comments (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		project_id TEXT NOT NULL,
+		author_identity TEXT NOT NULL,
+		content TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS judge_assignments (
+		id TEXT PRIMARY KEY,
+		event_id TEXT NOT NULL,
+		judge_id TEXT NOT NULL,
+		project_id TEXT NOT NULL,
+		assigned_at DATETIME NOT NULL,
+		started_at DATETIME,
+		completed_at DATETIME,
+		status TEXT NOT NULL,
+		assignment_batch TEXT,
+		assignment_reason TEXT,
+		UNIQUE(judge_id, project_id)
+	);
+
+	CREATE TABLE IF NOT EXISTS audit_log (
+		id TEXT PRIMARY KEY,
+		event_id TEXT NOT NULL,
+		actor_id TEXT NOT NULL,
+		action TEXT NOT NULL,
+		subject_type TEXT,
+		subject_id TEXT,
+		payload_json TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		prev_hash TEXT NOT NULL,
+		hash TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS webhooks (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		event_type TEXT NOT NULL,
+		target_url TEXT NOT NULL,
+		secret TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
 	`
 
 	_, err := db.Exec(schema)
@@ -110,3 +170,38 @@ func createSchema(db *sql.DB) {
 		log.Fatalf("Failed to create schema: %v", err)
 	}
 }
+
+// LogAudit appends a new cryptographically chained audit record.
+func (d *DB) LogAudit(eventID, actorID, action, subjectType, subjectID string, payload interface{}) error {
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		payloadBytes = []byte("{}")
+	}
+	payloadJSON := string(payloadBytes)
+
+	// Fetch previous hash
+	var prevHash string
+	err = d.QueryRow("SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1").Scan(&prevHash)
+	if err == sql.ErrNoRows {
+		prevHash = "0000000000000000000000000000000000000000000000000000000000000000"
+	} else if err != nil {
+		return err
+	}
+
+	id := uuid.New().String()
+	createdAt := time.Now().UTC().Format(time.RFC3339)
+
+	// hash = SHA256(prev_hash + event_id + actor_id + action + canonical_payload + created_at)
+	msg := prevHash + eventID + actorID + action + payloadJSON + createdAt
+	h := sha256.New()
+	h.Write([]byte(msg))
+	hash := hex.EncodeToString(h.Sum(nil))
+
+	_, err = d.Exec(`
+		INSERT INTO audit_log (id, event_id, actor_id, action, subject_type, subject_id, payload_json, created_at, prev_hash, hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, eventID, actorID, action, subjectType, subjectID, payloadJSON, createdAt, prevHash, hash)
+
+	return err
+}
+

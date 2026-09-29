@@ -61,6 +61,105 @@ paths:
         '403':
           description: Forbidden (Requires Organizer role)
 
+  /api/export/bundle:
+    get:
+      summary: Export T4 Signed Results Bundle
+      description: Generates a ZIP file containing results.json, audit-anchor.json, and a signed manifest.json for offline verification.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Signed results bundle ZIP
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Forbidden (Requires Organizer role)
+
+  /api/export/lossless:
+    get:
+      summary: Export Lossless SQLite DB
+      description: Downloads the full dogfood.sqlite database for offline lossless backups.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: SQLite database file
+          content:
+            application/vnd.sqlite3:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Forbidden (Requires Organizer role)
+
+  /api/import/lossless:
+    post:
+      summary: Import Lossless SQLite DB
+      description: Uploads a dogfood.sqlite file, replacing the active database and triggering a server restart to load the new state.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                database:
+                  type: string
+                  format: binary
+              required:
+                - database
+      responses:
+        '200':
+          description: Import applied. Server restarting.
+        '403':
+          description: Forbidden (Requires Organizer role)
+
+  /api/assignments:
+    get:
+      summary: Get Judge Assignments
+      description: Returns project assignments for the authenticated judge.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: JSON array of assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    project_id:
+                      type: string
+                    status:
+                      type: string
+
+  /api/audit:
+    get:
+      summary: Fetch Audit Log
+      description: Returns cryptographic audit logs.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: JSON array of audit logs
+
+  /api/judging/progress:
+    get:
+      summary: Judging Progress
+      description: Returns current judging progress metrics.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: JSON object with progress stats
+
   /judge/pairwise:
     post:
       summary: Submit Pairwise Comparison
@@ -166,3 +265,113 @@ paths:
             text/html:
               schema:
                 type: string
+
+  /api/projects/{id}/vote:
+    post:
+      summary: Public Vote for Project
+      description: Submits a public vote for a project. Supports configurable voting access modes (authenticated, email-gated, open-link). Includes rate-limiting and duplicate detection.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  description: Optional email for email-gated voting mode.
+      responses:
+        '200':
+          description: Vote recorded
+        '409':
+          description: Conflict (Duplicate vote)
+
+  /api/projects/{id}/comment:
+    post:
+      summary: Add Comment
+      description: Adds a comment to a project.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+      responses:
+        '200':
+          description: Comment added
+
+  /api/projects/{id}:
+    put:
+      summary: Update Project
+      description: Fully updates project details. Restricted to project owners or organizers.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                summary:
+                  type: string
+                repo_url:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Project updated
+        '403':
+          description: Forbidden
+    delete:
+      summary: Delete Project
+      description: Deletes a project. Restricted to project owners or organizers.
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Project deleted
+        '403':
+          description: Forbidden
+
+  /results:
+    get:
+      summary: Public Results
+      description: Returns the public leaderboard if the configurable voting close time has passed.
+      responses:
+        '200':
+          description: Leaderboard results
+        '403':
+          description: Forbidden (Results hidden until close time)

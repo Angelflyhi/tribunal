@@ -8,35 +8,45 @@ import (
 )
 
 // ZScoreNormalize standardizes a slice of raw scores for a single judge.
-// It computes (score - mean) / stddev. If stddev is 0, it returns 0s.
-func ZScoreNormalize(scores []float64) []float64 {
+// It applies empirical shrinkage towards a prior (e.g. global mean/std)
+// to prevent extreme variance blow-up when a judge has very few reviews.
+func ZScoreNormalize(scores []float64, priorMean, priorStddev, shrinkage float64) []float64 {
 	if len(scores) == 0 {
 		return nil
 	}
 	if len(scores) == 1 {
-		return []float64{0}
+		return []float64{0} // Can't estimate variance, return 0
 	}
 
 	sum := 0.0
 	for _, s := range scores {
 		sum += s
 	}
-	mean := sum / float64(len(scores))
+	sampleMean := sum / float64(len(scores))
 
 	sqSum := 0.0
 	for _, s := range scores {
-		sqSum += (s - mean) * (s - mean)
+		sqSum += (s - sampleMean) * (s - sampleMean)
 	}
-	variance := sqSum / float64(len(scores))
-	stddev := math.Sqrt(variance)
+	sampleVar := sqSum / float64(len(scores))
+	sampleStd := math.Sqrt(sampleVar)
+
+	// Shrinkage calculation:
+	// alpha = n / (n + k), where k is the shrinkage pseudo-count (e.g. 3.0)
+	// We blend the sample estimates with the prior estimates
+	n := float64(len(scores))
+	alpha := n / (n + shrinkage)
+
+	shrunkMean := alpha*sampleMean + (1-alpha)*priorMean
+	shrunkStd := alpha*sampleStd + (1-alpha)*priorStddev
 
 	result := make([]float64, len(scores))
-	if stddev == 0 {
+	if shrunkStd == 0 {
 		return result // all 0s
 	}
 
 	for i, s := range scores {
-		result[i] = (s - mean) / stddev
+		result[i] = (s - shrunkMean) / shrunkStd
 	}
 	return result
 }
@@ -285,4 +295,61 @@ func BootstrapConfidenceIntervals(wins [][]int, n int, iterations int) []RankInt
 		})
 	}
 	return intervals
+}
+
+// JudgeInfluence contains the max rank displacement caused by a judge.
+type JudgeInfluence struct {
+	JudgeID     string
+	MaxRankDiff int
+}
+
+// LeaveOneOutJudgeInfluence estimates the robustness of the Bradley-Terry ranking
+// by computing how much the final ranking changes if a specific judge's comparisons
+// are removed.
+func LeaveOneOutJudgeInfluence(wins [][]int, n int, judgeComparisons map[string][][2]int) []JudgeInfluence {
+	if n == 0 {
+		return nil
+	}
+
+	// Base ranks
+	baseQualities := FitBradleyTerry(wins, n)
+	baseRanks := computeRanks(baseQualities)
+
+	var influences []JudgeInfluence
+
+	for judgeID, comparisons := range judgeComparisons {
+		// Clone wins and remove this judge's comparisons
+		looWins := make([][]int, n)
+		for i := 0; i < n; i++ {
+			looWins[i] = make([]int, n)
+			copy(looWins[i], wins[i])
+		}
+
+		for _, comp := range comparisons {
+			if looWins[comp[0]][comp[1]] > 0 {
+				looWins[comp[0]][comp[1]]--
+			}
+		}
+
+		looQualities := FitBradleyTerry(looWins, n)
+		looRanks := computeRanks(looQualities)
+
+		maxDiff := 0
+		for i := 0; i < n; i++ {
+			diff := baseRanks[i] - looRanks[i]
+			if diff < 0 {
+				diff = -diff
+			}
+			if diff > maxDiff {
+				maxDiff = diff
+			}
+		}
+
+		influences = append(influences, JudgeInfluence{
+			JudgeID:     judgeID,
+			MaxRankDiff: maxDiff,
+		})
+	}
+
+	return influences
 }

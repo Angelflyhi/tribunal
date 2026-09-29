@@ -33,6 +33,8 @@ Our schema is normalized to prevent anomalies and support the complex relationsh
 *   `scores`: Standard rubric scoring.
 *   `pairwise_comparisons`: Advanced Bradley-Terry A/B testing records.
 *   `judge_tracks`: Mapping of which judges evaluate which tracks.
+*   `judge_assignments`: Engine enforcing load balancing, conflict-free pairing, and sufficient project coverage.
+*   `audit_log`: Cryptographic hash-chain linking all core actions for immutable tamper-evident logs.
 
 ## Security (T2 Peer Isolation)
 
@@ -44,6 +46,15 @@ Our data layer enforces strict contextual bounds. The API endpoint `GET /api/jud
 We implemented an advanced, state-of-the-art judging engine within the Go binary itself (no external Python microservices needed):
 1.  **Z-Score Normalization:** Standardizes standard rubric scores on the fly.
 2.  **Bradley-Terry Model:** Uses a Minorize-Maximization (MM) algorithm to iteratively rank projects based on Pairwise Comparisons.
+
+## Extended Features (T3 & T4)
+We have fully implemented the T3 Public Voting features and T4 API Extensions for manual review:
+- **Public Voting (T3):** `POST /api/projects/{id}/vote` supports open-link, email-gated, and authenticated voting modes with rate limiting and duplicate detection (409 Conflict).
+- **Public Results (T3):** `GET /results` enforces a `voting_close` timestamp check, hiding results until judging is finished.
+- **Auditing (T3):** A comprehensive `audit_logs` table tracks all actions.
+- **REST Expansion (T4):** We expose `PUT` and `DELETE` endpoints for project management.
+- **Webhooks & Embeds (T4):** Background goroutines handle real webhook deliveries from DB configurations, and `/embed/gallery` provides a CORS-enabled iframe gallery.
+- **Bulk Import (T4):** `POST /api/import` accepts bulk JSON imports using SQL transactions.
 
 ## Deployment
 
